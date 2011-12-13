@@ -312,48 +312,48 @@ setup_datasets()
   datasets=$(zfs list -H -o name | xargs)
   
   if ! echo $datasets | grep dump > /dev/null; then
-    printf "%-56s" "Making dump zvol... " >&4
+    printf "%-56s" "Making dump zvol... " 
     create_dump
-    printf "%4s\n" "done" >&4
+    printf "%4s\n" "done" 
   fi
 
   if ! echo $datasets | grep ${CONFDS} > /dev/null; then
-    printf "%-56s" "Initializing config dataset for zones... " >&4
+    printf "%-56s" "Initializing config dataset for zones... " 
     zfs create ${CONFDS} || fatal "failed to create the config dataset"
     chmod 755 /${CONFDS}
     cp -p /etc/zones/* /${CONFDS}
     zfs set mountpoint=legacy ${CONFDS}
-    printf "%4s\n" "done" >&4
+    printf "%4s\n" "done" 
   fi
 
   if ! echo $datasets | grep ${USBKEYDS} > /dev/null; then
     if [[ -n $(/bin/bootparams | grep "^smartos=true") ]]; then
-        printf "%-56s" "Creating config dataset... " >&4
+        printf "%-56s" "Creating config dataset... " 
         zfs create -o mountpoint=legacy ${USBKEYDS} || \
           fatal "failed to create the config dataset"
         mkdir /usbkey
         mount -F zfs ${USBKEYDS} /usbkey
-        printf "%4s\n" "done" >&4
+        printf "%4s\n" "done" 
     fi
   fi
 
   if ! echo $datasets | grep ${COREDS} > /dev/null; then
-    printf "%-56s" "Creating global cores dataset... " >&4
+    printf "%-56s" "Creating global cores dataset... " 
     zfs create -o quota=10g -o mountpoint=/${SYS_ZPOOL}/global/cores \
         -o compression=gzip ${COREDS} || \
         fatal "failed to create the cores dataset"
-    printf "%4s\n" "done" >&4
+    printf "%4s\n" "done" 
   fi
 
   if ! echo $datasets | grep ${OPTDS} > /dev/null; then
-    printf "%-56s" "Creating opt dataset... " >&4
+    printf "%-56s" "Creating opt dataset... " 
     zfs create -o mountpoint=legacy ${OPTDS} || \
       fatal "failed to create the opt dataset"
-    printf "%4s\n" "done" >&4
+    printf "%4s\n" "done" 
   fi
 
   if ! echo $datasets | grep ${VARDS} > /dev/null; then
-    printf "%-56s" "Initializing var dataset... " >&4
+    printf "%-56s" "Initializing var dataset... " 
     zfs create ${VARDS} || \
       fatal "failed to create the var dataset"
     chmod 755 /${VARDS}
@@ -363,7 +363,7 @@ setup_datasets()
     fi
 
     zfs set mountpoint=legacy ${VARDS}
-    printf "%4s\n" "done" >&4
+    printf "%4s\n" "done" 
   fi
 }
 
@@ -372,7 +372,7 @@ create_swap()
     swapsize=$1
 
     if ! zfs list -H -o name ${SWAPVOL}; then
-        printf "%-56s" "Creating swap zvol... " >&4
+        printf "%-56s" "Creating swap zvol... " 
 
         #
         # We cannot allow the swap size to be less than the size of DRAM, lest
@@ -394,7 +394,7 @@ create_swap()
         fi
 
         swap -a /dev/zvol/dsk/${SWAPVOL}
-        printf "%4s\n" "done" >&4
+        printf "%4s\n" "done" 
     fi
 }
 create_zpool()
@@ -408,7 +408,7 @@ create_zpool()
     fi
 
     disk_count=$(echo "${disks}" | wc -w | tr -d ' ')
-    printf "%-56s" "Creating pool $pool... " >&4
+    printf "%-56s" "Creating pool $pool... " 
 
     # If no pool profile was provided, use a default based on the number of
     # devices in that pool.
@@ -447,7 +447,7 @@ create_zpool()
     zfs set atime=off ${pool} || \
         fatal "failed to set atime=off for pool ${pool}"
 
-    printf "%4s\n" "done" >&4
+    printf "%4s\n" "done" 
 }
 create_zpools()
 {
