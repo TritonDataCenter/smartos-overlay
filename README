@@ -1,0 +1,3 @@
+This is the overlay directory containing extra files specific to
+SmartOS ( http://github.com/joyent/smartos-live ) not required or conflicting
+with analogues in the SDC product
