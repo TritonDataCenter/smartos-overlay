@@ -45,14 +45,6 @@
 		<service_fmri value='svc:/network/loopback' />
 	</dependency>
 
-	<dependency
-		name='joyent'
-		grouping='require_all'
-		restart_on='none'
-		type='service'>
-		<service_fmri value='svc:/system/filesystem/smartdc' />
-	</dependency>
-	
 	<instance name='default' enabled='true'>
 
 	<exec_method

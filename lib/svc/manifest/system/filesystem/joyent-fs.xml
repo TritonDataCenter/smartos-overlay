@@ -58,6 +58,13 @@
 		<service_fmri value='svc:/system/filesystem/minimal' />
 	</dependent>
 
+	<dependent
+		name='joyent-fs_network-physical'
+		grouping='require_all'
+		restart_on='none'>
+		<service_fmri value='svc:/network/physical' />
+	</dependent>
+
 	<!--
 	  Start method timeout is infinite to handle potentially unbounded
 	  fsck times.
