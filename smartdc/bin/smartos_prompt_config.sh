@@ -454,7 +454,7 @@ create_zpools()
   devs=$1
 
   export SYS_ZPOOL="zones"
-  create_zpool $devs
+  create_zpool "$devs"
   sleep 5
 
   svccfg -s svc:/system/smartdc/init setprop config/zpool="zones"
@@ -667,7 +667,7 @@ echo "*********************************************"
 echo "* This will erase *ALL DATA* on these disks *"
 echo "*********************************************"
 promptval "are you sure?" "n"
-[ "$val" == "y" ] && (create_zpools $DISK_LIST)
+[ "$val" == "y" ] && (create_zpools "$DISK_LIST")
 
 clear
 echo "The system will now finish configuration and reboot. Please wait..."
