@@ -124,6 +124,11 @@ if smf_is_globalzone; then
     load_sdc_config
     # Load boot params with BOOT_ prefix
     load_sdc_bootparams
+    
+    # Set up etherstubs
+    for stub in $(echo "${CONFIG_etherstub}" | sed -e "s/,/ /g"); do
+        dladm create-etherstub -t $stub || echo "ERROR: could not create etherstub ${stub}."
+    done
 
     # Setup admin NIC
     if [[ -n ${SYSINFO_NIC_admin} ]]; then
