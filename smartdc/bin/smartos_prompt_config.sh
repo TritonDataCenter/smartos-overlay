@@ -281,7 +281,7 @@ promptpool()
     if [[ $bad != "" ]]; then
       printf "The disks %s are not valid choices" $bad
     else
-      DISK_LIST=$val
+      DISK_LIST="$val"
       break
     fi
   done
@@ -454,7 +454,7 @@ create_zpools()
   devs=$1
 
   export SYS_ZPOOL="zones"
-  create_zpool $devs
+  create_zpool "$devs"
   sleep 5
 
   svccfg -s svc:/system/smartdc/init setprop config/zpool="zones"
@@ -468,6 +468,7 @@ create_zpools()
   export SWAPVOL=${SYS_ZPOOL}/swap
   
   setup_datasets
+  create_swap
   #
   # Since there may be more than one storage pool on the system, put a
   # file with a certain name in the actual "system" pool.
@@ -667,7 +668,7 @@ echo "*********************************************"
 echo "* This will erase *ALL DATA* on these disks *"
 echo "*********************************************"
 promptval "are you sure?" "n"
-[ "$val" == "y" ] && (create_zpools $DISK_LIST)
+[ "$val" == "y" ] && (create_zpools "$DISK_LIST")
 
 clear
 echo "The system will now finish configuration and reboot. Please wait..."
