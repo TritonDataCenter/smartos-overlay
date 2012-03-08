@@ -124,7 +124,7 @@ if smf_is_globalzone; then
     load_sdc_config
     # Load boot params with BOOT_ prefix
     load_sdc_bootparams
-    
+
     # Set up etherstubs
     for stub in $(echo "${CONFIG_etherstub}" | sed -e "s/,/ /g"); do
         dladm create-etherstub -t $stub || echo "ERROR: could not create etherstub ${stub}."
@@ -176,8 +176,8 @@ if smf_is_globalzone; then
             ifconfig ${SYSINFO_NIC_admin} dhcp || /bin/true
             ADMIN_NIC_UP=true
         fi
-        # If on VMWare, create a bridge which allows traffic to flow correctly to the host-only network
-        if [[ "${ADMIN_NIC_UP}" == "true" ]] && [[ ${SYSINFO_Product} == "VMware Virtual Platform" ]]; then
+        # If on VMWare or Parallels or VirtualBox, create a bridge which allows traffic to flow correctly to the host-only network
+        if [[ "${ADMIN_NIC_UP}" == "true" ]] && [[ ${SYSINFO_Product} == "VMware Virtual Platform" || ${SYSINFO_Product} == "Parallels Virtual Platform" || ${SYSINFO_Product} == "VirtualBox" ]]; then
             dladm create-bridge -l ${SYSINFO_NIC_admin} vmwarebr
         fi
     else
