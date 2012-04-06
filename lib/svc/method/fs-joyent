@@ -112,6 +112,10 @@ if [ $? -ne 0 ]; then
     fi
 fi
 
+if [[ ! -f /var/db/dsadm/sources.list ]]; then
+  mkdir -p /var/db/dsadm && cp /usr/ds/etc/sources.list.sample /var/db/dsadm/sources.list
+fi
+
 # The rest only applies to the headnode
 /bin/bootparams | grep "^headnode=true" >/dev/null || exit $SMF_EXIT_OK
 
