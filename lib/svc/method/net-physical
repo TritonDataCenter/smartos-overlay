@@ -132,11 +132,18 @@ if smf_is_globalzone; then
 
     # Setup admin NIC
     if [[ -n ${SYSINFO_NIC_admin} ]]; then
+        ADMIN_NIC=${SYSINFO_NIC_admin}
         ifconfig ${SYSINFO_NIC_admin} plumb
+        if [[ -n ${CONFIG_admin_vlan_id} ]];
+        then
+            dladm create-vlan -l ${SYSINFO_NIC_admin} -v ${CONFIG_admin_vlan_id} admin0
+	    ifconfig admin0 plumb
+            ADMIN_NIC=admin0
+        fi
         if [[ ${headnode} == "true" ]]; then
             if [[ -n ${CONFIG_admin_ip} ]] && [[ -n ${CONFIG_admin_netmask} ]];
             then
-                ifconfig ${SYSINFO_NIC_admin} inet ${CONFIG_admin_ip} \
+                ifconfig ${ADMIN_NIC} inet ${CONFIG_admin_ip} \
                     netmask ${CONFIG_admin_netmask} up
                 ADMIN_NIC_UP=true
 
@@ -154,7 +161,7 @@ if smf_is_globalzone; then
             fi
          elif [[ -n $(/usr/bin/bootparams | grep "^smartos") ]]; then
             if [[ -n ${CONFIG_admin_ip} ]] && [[ -n ${CONFIG_admin_netmask} ]]; then
-                ifconfig ${SYSINFO_NIC_admin} inet ${CONFIG_admin_ip} \
+                ifconfig ${ADMIN_NIC} inet ${CONFIG_admin_ip} \
                     netmask ${CONFIG_admin_netmask} up
                 ADMIN_NIC_UP=true
 
@@ -166,19 +173,19 @@ if smf_is_globalzone; then
                     done
                 fi
             else
-                ifconfig ${SYSINFO_NIC_admin} dhcp || /bin/true
+                ifconfig ${ADMIN_NIC} dhcp || /bin/true
                 ADMIN_NIC_UP=true
             fi
 
         else
             # We ignore errors here because the most common one is that DHCP is
             # already running.
-            ifconfig ${SYSINFO_NIC_admin} dhcp || /bin/true
+            ifconfig ${ADMIN_NIC} dhcp || /bin/true
             ADMIN_NIC_UP=true
         fi
         # If on VMWare, create a bridge which allows traffic to flow correctly to the host-only network
         if [[ "${ADMIN_NIC_UP}" == "true" ]] && [[ ${SYSINFO_Product} == "VMware Virtual Platform" ]]; then
-            dladm create-bridge -l ${SYSINFO_NIC_admin} vmwarebr
+            dladm create-bridge -l ${ADMIN_NIC} vmwarebr
         fi
     else
         echo "ERROR: admin NIC not found, unable to bring up admin network."
