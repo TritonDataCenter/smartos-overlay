@@ -152,7 +152,7 @@ if smf_is_globalzone; then
                 # Set a flag, but try to plumb the other interfaces anyway
                 ADMIN_NIC_MISCONFIGURED=true
             fi
-         elif [[ -n $(/usr/bin/bootparams | grep "^smartos") ]]; then
+         elif [[ -n $(/usr/bin/bootparams | grep "^smartos=true") ]]; then
             if [[ -n ${CONFIG_admin_ip} ]] && [[ -n ${CONFIG_admin_netmask} ]]; then
                 ifconfig ${SYSINFO_NIC_admin} inet ${CONFIG_admin_ip} \
                     netmask ${CONFIG_admin_netmask} up
