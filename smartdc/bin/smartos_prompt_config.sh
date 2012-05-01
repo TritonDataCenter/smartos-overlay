@@ -274,6 +274,10 @@ promptpool()
     echo ""
     bad=""
     read val
+    if [[ $val == "" ]]; then
+      printf "At least one disk must be specified"
+      continue
+    fi
     for disk in $(echo $val | tr " " "\n"); do
       if [[ -z $disk ]]; then continue; fi;
       echo $disks | grep $disk 1>&2 > /dev/null
