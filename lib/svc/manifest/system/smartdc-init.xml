@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <!DOCTYPE service_bundle SYSTEM "/usr/share/lib/xml/dtd/service_bundle.dtd.1">
 <!--
- Copyright 2010 Joyent, Inc.  All rights reserved.
+ Copyright 2012 Joyent, Inc.  All rights reserved.
  Use is subject to license terms.
 
  CDDL HEADER START
@@ -55,6 +55,12 @@
 	before we reboot to install the infrastructure zones, so it might seem
 	like it should run early in boot, but it can't because of the zone
 	issue described above.
+
+	The dependency on network/physical is needed since all of the earlier
+	svcs which have a dependency on network/physical are using optional_all.
+	That makes sense for those svcs since they can come up without a
+	network, but for SmartOS, by this point we require the network to be
+	there.
 	-->
 	<dependency
 		name='zones'
@@ -62,6 +68,14 @@
 		grouping='require_all'
 		restart_on='none'>
 		<service_fmri value='svc:/system/zones' />
+	</dependency>
+
+        <dependency
+		name='net-physical'
+		type='service'
+		grouping='require_all'
+		restart_on='none'>
+		<service_fmri value='svc:/network/physical' />
 	</dependency>
 
 	<exec_method
