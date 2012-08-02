@@ -130,6 +130,18 @@ if smf_is_globalzone; then
         dladm create-etherstub -t $stub || echo "ERROR: could not create etherstub ${stub}."
     done
 
+    # Set up aggregates
+    for aggr in $(echo "${CONFIG_aggrs}" | sed -e "s/,/ /g"); do
+        ifaces=$(eval echo \$CONFIG_"$aggr"_ifaces | sed -e "s/,/ /g")
+        # plumb then unplumb aggr interfaces
+        for aggr_iface in $ifaces; do
+            ifconfig $aggr_iface plumb >/dev/null 2>&1
+            ifconfig $aggr_iface unplumb >/dev/null 2>&1
+        done
+        dladm create-aggr $(echo "$ifaces" | sed -e "s/ / -l /g" -e "s/^/-l /g") -L $(eval echo \$CONFIG_"$aggr"_lacp_mode) $aggr || echo "ERROR: could not create aggreagate ${aggr}."
+        if [ $(eval echo \$CONFIG_"$aggr"_admin) = true ]; then SYSINFO_NIC_admin=$aggr; fi
+    done
+
     # Setup admin NIC
     if [[ -n ${SYSINFO_NIC_admin} ]]; then
         ifconfig ${SYSINFO_NIC_admin} plumb
