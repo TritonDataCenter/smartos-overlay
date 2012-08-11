@@ -93,7 +93,7 @@ if [ $? -ne 0 ]; then
 
   if [[ -n $(/bin/bootparams | grep '^headnode=true') || \
         -n $(/bin/bootparams | grep '^smartos=true') ]]; then
-        mkdir /usbkey
+        mkdir -p /usbkey
     mount -F zfs ${SYS_ZPOOL}/usbkey /usbkey
   fi
   if [[ -n $(/bin/bootparams | grep '^smartos=true') ]]; then
