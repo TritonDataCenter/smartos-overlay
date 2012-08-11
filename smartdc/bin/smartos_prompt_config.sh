@@ -310,7 +310,7 @@ create_dump()
     # Create the dump zvol
     zfs create -V ${base_size}mb ${SYS_ZPOOL}/dump || \
       fatal "failed to create the dump zvol"
-    dumpadm -d /dev/zvol/dsk/${SYS_ZPOOL}/dump
+    dumpadm -d /dev/zvol/dsk/${SYS_ZPOOL}/dump >/dev/null
 }
 
 #
@@ -372,6 +372,7 @@ setup_datasets()
     fi
 
     zfs set mountpoint=legacy ${VARDS}
+    printf "%4s\n" "done"
 
     if ! echo $datasets | grep ${SWAPVOL} > /dev/null; then
           printf "%-56s" "Creating swap zvol... " 
@@ -388,8 +389,8 @@ setup_datasets()
           size=${SYSINFO_MiB_of_Memory}
           zfs create -V ${size}mb ${SWAPVOL}
           swap -a /dev/zvol/dsk/${SWAPVOL}
+          printf "%4s\n" "done"
     fi
-    printf "%4s\n" "done" 
   fi
 }
 
@@ -400,7 +401,7 @@ create_zpool()
     pool=zones
 
     # If the pool already exists, don't create it again.
-    if /usr/sbin/zpool list -H -o name $pool; then
+    if /usr/sbin/zpool list -H -o name $pool >/dev/null 2>&1; then
         return 0
     fi
 
