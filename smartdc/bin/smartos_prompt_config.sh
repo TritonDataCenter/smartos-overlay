@@ -393,6 +393,58 @@ setup_datasets()
   fi
 }
 
+create_slices()
+{
+    disks=$1
+
+    for disk in ${disks}; do
+        fdisk -B /dev/rdsk/${disk}p0
+        prtvtoc -h /dev/rdsk/${disk}p0 | \
+            awk '$1=="2" {print; count=$5}
+                 $1=="8" {print; first=$5}
+                 END     {count-=first; print "0 2 00 "first" "count}' | \
+            fmthard -s - /dev/rdsk/${disk}s2 >/dev/null
+        slices="${slices} ${disk}s0"
+    done
+
+    echo "${slices}"
+}
+
+install_smartos()
+{
+    disks=$1
+
+    printf "%-56s" "Installing SmartOS to disk... "
+    zfs create ${SYS_ZPOOL}/smartos
+
+    CDROM=$(cfgadm | awk '/cd\/dvd/ {print $1}' | cut -d: -f3- | head -1)
+    mount -F hsfs -r /dev/${CDROM}p0 /mnt
+    cp -rp /mnt/platform /${SYS_ZPOOL}/smartos/
+    cp -rp /mnt/boot /${SYS_ZPOOL}/
+    umount /mnt
+
+    cd /${SYS_ZPOOL}/boot/grub
+
+    if [[ -f ${USB_PATH}/menu.lst ]]; then
+        cp ${USB_PATH}/menu.lst .
+
+    else
+        cat menu.lst | \
+            awk "BEGIN   {print \"findroot (pool_${SYS_ZPOOL},0,a)\"}
+                         {print}
+                 /title/ {print \"   bootfs ${SYS_ZPOOL}/smartos\"}" \
+            > menu.tmp && mv menu.tmp menu.lst
+    fi
+
+    for disk in ${disks}; do
+        installgrub stage1 stage2 /dev/rdsk/${disk}s0 >/dev/null
+    done
+
+    zpool set bootfs=${SYS_ZPOOL}/smartos ${SYS_ZPOOL}
+    zfs snapshot ${SYS_ZPOOL}/smartos@install-time
+
+    printf "%4s\n" "done"
+}
 
 create_zpool()
 {
@@ -402,6 +454,10 @@ create_zpool()
     # If the pool already exists, don't create it again.
     if /usr/sbin/zpool list -H -o name $pool; then
         return 0
+    fi
+
+    if [[ -n ${CONFIG_disk_install} ]]; then
+        disks=$(create_slices "${disks}")
     fi
 
     disk_count=$(echo "${disks}" | wc -w | tr -d ' ')
@@ -465,6 +521,11 @@ create_zpools()
   export SWAPVOL=${SYS_ZPOOL}/swap
   
   setup_datasets
+
+  if [[ -n ${CONFIG_disk_install} ]]; then
+      install_smartos "$devs"
+  fi
+
   #
   # Since there may be more than one storage pool on the system, put a
   # file with a certain name in the actual "system" pool.
