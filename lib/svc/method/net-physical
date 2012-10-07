@@ -263,7 +263,7 @@ else
         if [[ -f /etc/dhcp.${iface} || ! -f /etc/hostname.${iface} ]]; then
             ifconfig ${iface} dhcp
         else
-            ifconfig ${iface} inet `cat /etc/hostname.${iface}` up
+            ifconfig ${iface} inet `cat /etc/hostname.${iface}`
         fi
     done
 fi
