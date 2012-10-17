@@ -111,6 +111,25 @@ function vnic_up
     eval "vnic_${iface}_up=true"
 }
 
+# If there are aggregations in sysinfo, set them up.
+function create_aggrs
+{
+    if [[ -z "${SYSINFO_Aggregations}" ]]; then
+        return 0
+    fi
+
+    aggrs=(${SYSINFO_Aggregations//,/ })
+    for aggr in "${aggrs[@]}"; do
+        eval "links=\${SYSINFO_Aggregation_${aggr}_Interfaces}"
+        eval "mode=\${SYSINFO_Aggregation_${aggr}_LACP_mode}"
+        [[ -z "$mode" ]] && mode="off"
+
+        echo "Creating aggr: ${aggr} (mode=${mode}, links=${links})"
+        dladm create-aggr -l $(echo ${links} | sed -e "s/,/ -l /g") \
+            -L ${mode} ${aggr}
+    done
+}
+
 if smf_is_globalzone; then
 
     dladm init-phys
@@ -130,6 +149,9 @@ if smf_is_globalzone; then
         dladm create-etherstub -t $stub || echo "ERROR: could not create etherstub ${stub}."
     done
 
+    # Create aggregations
+    create_aggrs
+ 
     # Setup admin NIC
     if [[ -n ${SYSINFO_NIC_admin} ]]; then
         ifconfig ${SYSINFO_NIC_admin} plumb
