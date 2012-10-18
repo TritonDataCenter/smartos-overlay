@@ -4,7 +4,6 @@ d lib/svc/method 0755 root bin
 f lib/svc/method/fs-joyent 0555 root bin
 f lib/svc/method/smartdc-init 0555 root bin
 f lib/svc/method/smartdc-config 0555 root bin
-f lib/svc/method/net-physical 0555 root bin
 d smartdc 0755 root bin
 d smartdc/bin 0755 root bin
 f smartdc/bin/smartos_prompt_config.sh 0555 root bin
@@ -12,6 +11,5 @@ d root 0755 root root
 f root/.bash_profile 0644 root root
 f root/.bashrc 0644 root root
 f root/.profile 0644 root root
-f lib/svc/manifest/network/network-physical.xml 0444 root sys
 f lib/svc/manifest/system/filesystem/joyent-fs.xml 0444 root sys
 f lib/svc/manifest/system/smartdc-init.xml 0444 root sys
