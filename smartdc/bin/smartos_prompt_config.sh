@@ -22,6 +22,8 @@ declare -a states
 declare -a nics
 declare -a assigned
 declare -a DISK_LIST
+declare -a disks
+declare -a existing_pools
 
 sigexit()
 {
@@ -264,36 +266,71 @@ promptpw()
 	done
 }
 
+printdisks()
+{
+    i=1
+    while [ $i -le $disk_cnt ]; do
+        printf "%-4d %-9s\n" $i ${disks[$i]}
+        ((i++))
+    done
+}
+
+existing_pool()
+{
+	/usr/sbin/zpool import -f -a
+    existing_pools=$(/usr/sbin/zpool list -H)
+    if [[ ${existing_pools} != "" ]]; then 
+
+	echo "pools exist: "
+	echo
+	echo "---------------------------------------------------------------------"
+	/usr/sbin/zpool list -v
+	echo "---------------------------------------------------------------------"
+	echo
+	echo
+	echo "Choosing drives currently in pools will result in the existing pool"
+	echo "becoming degraded, non-functional, or destroyed."
+	echo
+	echo "Press ENTER continue."
+	read
+	echo
+    fi
+}
+
 promptpool()
 {
-  disks=$(disklist -n)
-  while [[ /usr/bin/true ]]; do
-    echo "Please select disks for the storage pool, space separated"
-    echo ""
-    printf "Valid choices are ${disks}"
-    echo ""
-    bad=""
-    read val
-    if [[ $val == "" ]]; then
-      echo "At least one disk must be specified"
-      echo ""
-      continue
-    fi
-    for disk in $(echo $val | tr " " "\n"); do
-      if [[ -z $disk ]]; then continue; fi;
-      echo $disks | grep $disk 1>&2 > /dev/null
-      if [[ $? != 0 ]]; then
-        bad="$disk $bad"
-      fi
-    done
-    if [[ $bad != "" ]]; then
-      printf "The disks %s are not valid choices" $bad
-    else
-      DISK_LIST="$val"
-      break
-    fi
-  done
-  
+    existing_pool
+    while [[ /usr/bin/true ]]; do
+       echo "Please select disks for the storage pool, space separated"
+       echo ""
+       printf "Valid choices are:\n\n"
+           printdisks
+       echo "q    Do not select any disks, quit installer"
+       echo ""
+       bad=""
+       read val
+       if [[ $val == "q" ]]; then exit 0; fi;
+       if [[ $val == "" ]]; then
+         echo "At least one disk must be specified"
+         echo ""
+         continue
+       fi
+       for n in $(echo $val | tr " " "\n"); do
+         if [[ -z $n ]]; then continue; fi;
+         if [[ -z ${disks[$n]} ]]; then
+           bad="$n $bad"
+         else
+          DISK_LIST=$DISK_LIST" "${disks[$n]}
+         fi
+       done
+       if [[ $bad != "" ]]; then
+         printf "Disk %s is not a valid choice\n\n" $bad
+         DISK_LIST=""
+       else
+         break
+       fi
+     done 
+	
 }
 
 create_dump()
@@ -405,8 +442,7 @@ create_zpool()
     fi
 
     disk_count=$(echo "${disks}" | wc -w | tr -d ' ')
-    printf "%-56s" "Creating pool $pool... " 
-
+  
     # If no pool profile was provided, use a default based on the number of
     # devices in that pool.
     if [[ -z ${profile} ]]; then
@@ -439,6 +475,16 @@ create_zpool()
         zpool_args="${profile} ${disks}"
     fi
 
+    if [[ $existing_pools != "" ]]; then
+    	for found_pool in $(/usr/sbin/zpool list -H | cut -f1); do
+			printf "%-56s" "Exporting pool: ${found_pool}..."
+        	/usr/sbin/zpool export -f ${found_pool}
+			printf "%4s\n" "done"
+    	done
+	fi
+	
+	printf "%-56s" "Creating pool $pool... " 
+	
     zpool create -f ${pool} ${zpool_args} || \
         fatal "failed to create pool ${pool}"
     zfs set atime=off ${pool} || \
@@ -520,6 +566,19 @@ fi
 ifconfig -a plumb
 updatenicstates
 
+#
+# Get nonremoveable disk info
+#
+
+disk_cnt=0
+
+for disk in $(disklist -n); do
+    ((disk_cnt++))
+    disks[$disk_cnt]=$disk
+done
+
+	
+	
 export TERM=sun-color
 export TERM=xterm-color
 stty erase ^H
@@ -655,12 +714,34 @@ promptval "Would you like to edit the final configuration file?" "n"
 [ "$val" == "y" ] && vi $tmp_config
 clear
 
-echo
 echo "Your data pool will be created with the following disks:"
 echo $DISK_LIST
-echo "*********************************************"
-echo "* This will erase *ALL DATA* on these disks *"
-echo "*********************************************"
+
+using_existing=""
+echo
+for p in $(/usr/sbin/zpool list -H | cut -f1); do
+	for l in $(/usr/sbin/zpool list -v $p); do
+		for d in $DISK_LIST; do
+			if [[ "$l" == *"$d"* ]]; then
+				using_existing="yes"
+				echo "*********************************************"
+				echo "* Disk $d belongs to a valid zpool $p"
+				echo "* This will erase *ALL DATA* on this disk *"
+				echo "*********************************************"
+				echo
+			fi
+		done
+	done
+done
+if [[ $using_existing != "yes" ]]; then
+	
+	
+	echo "*********************************************"
+	echo "* This will erase *ALL DATA* on these disks *"
+	echo "*********************************************"
+	echo
+fi
+
 promptval "are you sure?" "n"
 [ "$val" == "y" ] && (create_zpools "$DISK_LIST")
 
