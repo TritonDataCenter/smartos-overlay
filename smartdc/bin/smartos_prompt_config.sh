@@ -674,7 +674,6 @@ sed -e "s|^root:[^\:]*:|root:${root_shadow}:|" /etc/shadow > /usbkey/shadow \
       && chmod 400 /usbkey/shadow
 
 cp -rp /etc/ssh /usbkey/ssh
-cp /usr/img/etc/sources.list.sample /var/db/imgadm/sources.list
 
 reboot
 
