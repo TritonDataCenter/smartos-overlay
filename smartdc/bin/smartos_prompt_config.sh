@@ -22,6 +22,12 @@ declare -a states
 declare -a nics
 declare -a assigned
 declare -a DISK_LIST
+declare -a disks
+declare -a show_disks
+declare -a existing_pools
+declare -a used_disks
+SPARE=""
+layout=""
 
 sigexit()
 {
@@ -264,37 +270,338 @@ promptpw()
 	done
 }
 
-promptpool()
+printdisks()
 {
-  disks=$(disklist -n)
-  while [[ /usr/bin/true ]]; do
-    echo "Please select disks for the storage pool, space separated"
-    echo ""
-    printf "Valid choices are ${disks}"
-    echo ""
-    bad=""
-    read val
-    if [[ $val == "" ]]; then
+	
+	echo "#   TYPE        DISK    VID   PID        SIZE           REMV      SSD"
+ 	
+	i=1
+
+ 	while [ $i -le $disk_cnt ]; do 
+		if [[ -z ${used_disks[${i}]} ]]; then
+			 echo "$i  ${show_disks[$i]}"
+ 		fi
+		((i++)) 
+ 	done
+
+}
+
+existing_pool()
+{
+	/usr/sbin/zpool import -f -a
+    existing_pools=$(/usr/sbin/zpool list -H)
+    if [[ ${existing_pools} != "" ]]; then 
+		
+		if [[ ${existing_pools} == *"zones"* ]]; then
+			echo -n "zones pool already exists, do you still wish to continue? (y/N): "
+			read zonescont
+			if [[ ${zonescont} == 'y' || ${zonescont} == 'Y' ]]; then
+
+				echo "pools exist: "
+				echo
+				echo "---------------------------------------------------------------------"
+				/usr/sbin/zpool list -v
+				echo "---------------------------------------------------------------------"
+				echo
+				echo "Choosing drives currently in pools will result in the existing pool"
+				echo "becoming degraded, non-functional, or destroyed."
+				echo
+				echo "Press ENTER continue."
+				read
+				echo
+	
+			else
+				exit 0
+			fi
+		fi
+    fi
+}
+
+
+promptzpooltype()
+{
+    existing_pool
+   
+		printdisks   
+	   
+		echo
+		echo "Chose a zpool layout"
+		echo "----------------------"
+
+		#layout number
+		lo=0
+		
+		if [[ ${disk_cnt} > 0 ]]; then
+		        ((lo++))
+		        echo "${lo}  single"
+		        layout[${lo}]="single"
+		fi
+		
+		if [[ ${disk_cnt} > 1 ]]; then
+		        ((lo++))
+				echo "${lo}  mirror"
+		        layout[${lo}]="mirror"
+		fi
+
+		if [[ ${disk_cnt} > 2 ]]; then
+		        ((lo++))
+		        echo "${lo}  mirror with hot spare"
+		        layout[${lo}]="mirrorhot"
+		        
+				((lo++))
+				echo "${lo}  raidz"
+		        layout[${lo}]="raidz"
+		fi
+
+		if [[ ${disk_cnt} > 3 ]]; then
+			((lo++))
+		   	echo "${lo}  raidz with hot spare"
+			layout[${lo}]="raidzhot"
+			
+		fi
+		
+		if [[ ${disk_cnt} > 5 ]]; then
+			((lo++))
+			echo "${lo}  raidz2"
+			layout[${lo}]="raidz2"
+
+		fi
+
+		echo "q  Do not select zpool layout, quit installer"
+		
+	while [[ /usr/bin/true ]]; do
+		echo
+		echo -n "Please select a storage pool type: "
+		read pval
+	
+	   numele=( ${pval} )
+	   
+       if [[ ${pval} == "q" ]]; then exit 0; fi;
+		   
+       if [[ ${pval} == "" ]]; then
+         continue
+       fi
+	   
+       	if [[ -z ${pval} ]]; then 
+			continue 
+		fi
+		
+		if [[ ${#numele[@]} -ne 1 || ${pval} -lt 1 || ${pval} -gt ${lo} ]]; then
+         	echo "Layout ${pval} is not a valid choice"
+			continue
+	 	fi
+		
+		pool_layout=${layout[$pval]}
+        
+		 break
+   	
+     done 
+	
+}
+
+
+
+promptdisk()
+{
+
+	# error check val, undef raid element?
+
+	spare=""
+	printdisks
+	echo "q  Do not select disks, quit installer"
+	echo
+	
+	if [[ ${pool_layout} == "single" ]]; then
+		while [[ /usr/bin/true ]]; do
+			echo -n "Please select 1 disk: "
+			read dval
+			checkdisks 1 0
+			ret=$?
+			if [[ ${ret} -eq 0 ]]; then 
+				break
+			fi
+		done
+	fi
+	
+	if [[ ${pool_layout} == "mirror" || ${pool_layout} == "mirrorhot" ]]; then
+		while [[ /usr/bin/true ]]; do
+			echo -n "Please select 2 disks to mirror separated by space: "
+			read dval
+			checkdisks 2 0
+			ret=$?
+			if [[ ${ret} -eq 0 ]]; then 
+				break
+			fi
+		done
+	fi
+	
+	if [[ ${pool_layout} == "raidz" || ${pool_layout} == "raidzhot" ]]; then
+		while [[ /usr/bin/true ]]; do
+			echo -n "Please select at least 3 disks for raidz separated by space: "
+			read dval
+			checkdisks 3 1
+			ret=$?
+			if [[ ${ret} -eq 0 ]]; then 
+				break
+			fi
+		done
+	fi
+	
+	if [[ ${pool_layout} == "mirrorhot" || ${pool_layout} == "raidzhot" ]]; then
+		printheader "Storage"
+		printdisks
+		echo
+		while [[ /usr/bin/true ]]; do
+			spare="yes"
+			echo -n "Please select hot spare: "
+			read dval
+			checkdisks 1 0
+			ret=$?
+			if [[ ${ret} -eq 0 ]]; then break; fi
+		done
+	fi
+	
+	if [[ ${pool_layout} == "raidz2" ]]; then
+		while [[ /usr/bin/true ]]; do
+			echo -n "Please select at least 6 disks for raidz2 separated by space: "
+			read dval
+			checkdisks 6 1
+			ret=$?
+			if [[ ${ret} -eq 0 ]]; then break; fi
+		done
+	fi
+ 
+
+}
+
+checkdisks()
+{
+	reqnum=$1
+	ormore=$2
+	
+	   
+    if [[ $dval == "q" ]]; then exit 0; fi
+		   
+    if [[ $dval == "" ]]; then
       echo "At least one disk must be specified"
       echo ""
-      continue
     fi
-    for disk in $(echo $val | tr " " "\n"); do
-      if [[ -z $disk ]]; then continue; fi;
-      echo $disks | grep $disk 1>&2 > /dev/null
-      if [[ $? != 0 ]]; then
-        bad="$disk $bad"
+	
+	numele=( ${dval} )
+	
+	if [[ ${ormore} != 0 ]]; then
+		if [[ ${reqnum} -gt ${#numele[@]} ]]; then
+			echo "Wrong number of disks, select at least ${reqnum}"
+			return 1
+		fi
+	else
+		if [[ ${reqnum} -ne ${#numele[@]} ]]; then
+			echo "Wrong number of disks, ${reqnum} disks needed"
+			return 1
+		fi
+	fi
+	
+	# are these the disks we're looking for?
+	bad=""
+    for n in ${dval}; do
+      if [[ -z $n ]]; then continue; fi;		  
+      if [[ -z ${disks[$n]}  || ! -z ${used_disks[$n]} ]]; then
+        bad="$n $bad"
+      else
+		  if [[ ${spare} != "" ]]; then
+			  SPARE=${disks[$n]}
+		  else
+			  DISK_LIST=$DISK_LIST" "${disks[$n]}
+			  used_disks[${n}]=${disks[${n}]}
+	   	  fi
       fi
-    done
+ 	done 
     if [[ $bad != "" ]]; then
-      printf "The disks %s are not valid choices" $bad
-    else
-      DISK_LIST="$val"
-      break
-    fi
-  done
-  
+      printf "Disk %s is not a valid choice\n\n" $bad
+	  if [[ ${spare} == "" ]]; then
+		  unset used_disks
+		  DISK_LIST=""
+	  fi
+      
+	  return 1
+  fi
+	
+	return 0
 }
+
+create_zpool()
+{
+    disks=$1
+    pool=zones
+
+    disk_count=$(echo "${disks}" | wc -w | tr -d ' ')
+  
+	if [[ ${pool_layout} == "single" ]]; then
+		zpool_args="${disks}"
+	fi
+	
+	if [[ ${pool_layout} == "mirror" || ${pool_layout} == "mirrorhot" ]]; then
+		zpool_args="mirror ${disks}"
+	fi
+	
+	if [[ ${pool_layout} == "raidz" || ${pool_layout} == "raidzhot" ]]; then
+		zpool_args="raidz ${disks}"
+	fi
+	
+	if [[ ${pool_layout} == "mirrorhot" || ${pool_layout} == "raidzhot" ]]; then
+		zpool_args="${zpool_args} spare ${SPARE}"
+	fi
+	
+	if [[ ${pool_layout} == "raidz2" ]]; then
+		zpool_args="raidz2 ${disks}"
+	fi
+
+	# export anything imported
+    if [[ $existing_pools != "" ]]; then
+    	for found_pool in $(/usr/sbin/zpool list -H | cut -f1); do
+			printf "%-56s" "Exporting pool: ${found_pool}..."
+        	/usr/sbin/zpool export -f ${found_pool}
+			printf "%4s\n" "done"
+    	done
+	fi
+	
+	printf "%-56s" "Creating pool $pool... " 
+	#echo "zpool create -f ${pool} ${zpool_args}"
+	
+    zpool create -f ${pool} ${zpool_args} || \
+        fatal "failed to create pool ${pool}"
+    zfs set atime=off ${pool} || \
+        fatal "failed to set atime=off for pool ${pool}"
+
+    printf "%4s\n" "done" 
+}
+
+create_zfs()
+{
+  devs=$1
+
+  export SYS_ZPOOL="zones"
+  create_zpool "$devs"
+  sleep 5
+
+  svccfg -s svc:/system/smartdc/init setprop config/zpool="zones"
+  svccfg -s svc:/system/smartdc/init:default refresh
+
+  export CONFDS=${SYS_ZPOOL}/config
+  export COREDS=${SYS_ZPOOL}/cores
+  export OPTDS=${SYS_ZPOOL}/opt
+  export VARDS=${SYS_ZPOOL}/var
+  export USBKEYDS=${SYS_ZPOOL}/usbkey
+  export SWAPVOL=${SYS_ZPOOL}/swap
+  
+  setup_datasets
+  #
+  # Since there may be more than one storage pool on the system, put a
+  # file with a certain name in the actual "system" pool.
+  #
+  touch /${SYS_ZPOOL}/.system_pool
+}
+
 
 create_dump()
 {
@@ -394,83 +701,7 @@ setup_datasets()
 }
 
 
-create_zpool()
-{
-    disks=$1
-    pool=zones
 
-    # If the pool already exists, don't create it again.
-    if /usr/sbin/zpool list -H -o name $pool; then
-        return 0
-    fi
-
-    disk_count=$(echo "${disks}" | wc -w | tr -d ' ')
-    printf "%-56s" "Creating pool $pool... " 
-
-    # If no pool profile was provided, use a default based on the number of
-    # devices in that pool.
-    if [[ -z ${profile} ]]; then
-        case ${disk_count} in
-        0)
-             fatal "no disks found, can't create zpool";;
-        1)
-             profile="";;
-        2)
-             profile=mirror;;
-        *)
-             profile=raidz;;
-        esac
-    fi
-
-    zpool_args=""
-
-    # When creating a mirrored pool, create a mirrored pair of devices out of
-    # every two disks.
-    if [[ ${profile} == "mirror" ]]; then
-        ii=0
-        for disk in ${disks}; do
-            if [[ $(( $ii % 2 )) -eq 0 ]]; then
-                  zpool_args="${zpool_args} ${profile}"
-            fi
-            zpool_args="${zpool_args} ${disk}"
-            ii=$(($ii + 1))
-        done
-    else
-        zpool_args="${profile} ${disks}"
-    fi
-
-    zpool create -f ${pool} ${zpool_args} || \
-        fatal "failed to create pool ${pool}"
-    zfs set atime=off ${pool} || \
-        fatal "failed to set atime=off for pool ${pool}"
-
-    printf "%4s\n" "done" 
-}
-create_zpools()
-{
-  devs=$1
-
-  export SYS_ZPOOL="zones"
-  create_zpool "$devs"
-  sleep 5
-
-  svccfg -s svc:/system/smartdc/init setprop config/zpool="zones"
-  svccfg -s svc:/system/smartdc/init:default refresh
-
-  export CONFDS=${SYS_ZPOOL}/config
-  export COREDS=${SYS_ZPOOL}/cores
-  export OPTDS=${SYS_ZPOOL}/opt
-  export VARDS=${SYS_ZPOOL}/var
-  export USBKEYDS=${SYS_ZPOOL}/usbkey
-  export SWAPVOL=${SYS_ZPOOL}/swap
-  
-  setup_datasets
-  #
-  # Since there may be more than one storage pool on the system, put a
-  # file with a certain name in the actual "system" pool.
-  #
-  touch /${SYS_ZPOOL}/.system_pool
-}
 updatenicstates()
 {
 	states=(1)
@@ -498,6 +729,28 @@ printheader()
 
 }
 
+getdisks()
+{
+	
+	disk_cnt=0
+
+	# diskinfo currently cant print just nonremovable drives
+	# fields in diskinfo may have multiple words making parsing uncertain
+
+	# get nonremovable drives from disklist, then key off those getting more
+	# info from diskinfo
+	
+	for disk in $(disklist -n); do
+		((disk_cnt++))
+		disks[$disk_cnt]=$disk
+		while read di_disk; do
+			if [[ ${di_disk} == *${disk}* ]]; then
+				show_disks[$disk_cnt]=$di_disk
+			fi
+		done < <(diskinfo -H)
+	done
+}
+
 trap sigexit SIGINT
 
 #
@@ -520,6 +773,14 @@ fi
 ifconfig -a plumb
 updatenicstates
 
+#
+# Get nonremoveable disk info
+#
+
+getdisks
+
+	
+	
 export TERM=sun-color
 export TERM=xterm-color
 stty erase ^H
@@ -548,6 +809,7 @@ while [ /usr/bin/true ]; do
 	promptnic "'admin'"
 	admin_nic="$val"
 
+	admin_ip="dhcp"
 	promptnet "IP address (or 'dhcp' )" "$admin_ip"
 	admin_ip="$val"
   if [[ $admin_ip != 'dhcp' ]]; then
@@ -577,9 +839,16 @@ while [ /usr/bin/true ]; do
     promptval "Default DNS search domain" "$dns_domain"
     dns_domain="$val"
   fi	
+  
+  	#######
+  
+  
 	printheader "Storage"
-	promptpool
+	promptzpooltype
+	printheader "Storage"
+ 	promptdisk
  
+	########
 	printheader "Account Information"
 	
 	promptpw "Enter root password" "nolen"
@@ -655,14 +924,67 @@ promptval "Would you like to edit the final configuration file?" "n"
 [ "$val" == "y" ] && vi $tmp_config
 clear
 
+printheader "Confirm Storage"
+echo "Your ${pool_layout%hot} data pool will be created with the following disks:"
 echo
-echo "Your data pool will be created with the following disks:"
-echo $DISK_LIST
-echo "*********************************************"
-echo "* This will erase *ALL DATA* on these disks *"
-echo "*********************************************"
+
+#echo $DISK_LIST
+
+
+for d in ${DISK_LIST}; do
+	i=1;
+ 	while [ $i -le $disk_cnt ]; do 
+			if [[ "${show_disks[$i]}" == *"${d}"* ]]; then
+				echo ${show_disks[$i]}
+			fi
+			((i++))
+	done
+done
+
+
+if [[ ${SPARE} != "" ]]; then
+	echo
+	echo "With the following disk as spare:"
+	echo
+
+#echo ${SPARE}
+
+	i=1
+	 	while [ $i -le $disk_cnt ]; do 
+				if [[ "${show_disks[$i]}" == *"${SPARE}"* ]]; then
+					echo ${show_disks[$i]}
+				fi
+				((i++))
+		done
+
+fi
+
+using_existing=""
+echo
+for p in $(/usr/sbin/zpool list -H | cut -f1); do
+	for l in $(/usr/sbin/zpool list -v $p); do
+		for d in $DISK_LIST; do
+			if [[ "$l" == *"$d"* ]]; then
+				using_existing="yes"
+				echo "**************************"
+				echo "* $d member of zpool $p. *"
+				echo "**************************"
+				echo
+			fi
+		done
+	done
+done
+if [[ $using_existing != "yes" ]]; then
+	
+	
+	echo "*********************************************"
+	echo "* This will erase *ALL DATA* on these disks *"
+	echo "*********************************************"
+	echo
+fi
+
 promptval "are you sure?" "n"
-[ "$val" == "y" ] && (create_zpools "$DISK_LIST")
+[ "$val" == "y" ] && (create_zfs "$DISK_LIST")
 
 clear
 echo "The system will now finish configuration and reboot. Please wait..."
@@ -675,5 +997,5 @@ sed -e "s|^root:[^\:]*:|root:${root_shadow}:|" /etc/shadow > /usbkey/shadow \
 
 cp -rp /etc/ssh /usbkey/ssh
 
-reboot
 
+reboot
