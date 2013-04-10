@@ -48,6 +48,25 @@ update_root_password()
       && mv /etc/shadow.new /etc/shadow
 }
 
+# Sets the default firewall rules for a node (unless they're already set)
+set_default_fw_rules() {
+    [[ -f /var/fw/.default_rules_setup ]] && return
+
+    /usr/sbin/fwadm add -f - <<RULES
+{
+  "rules": [
+  {
+    "description": "allow pings to all VMs",
+    "rule": "FROM any TO all vms ALLOW icmp type 8 code 0",
+    "enabled": true
+  }
+  ]
+}
+RULES
+
+    [[ $? -eq 0 ]] && touch /var/fw/.default_rules_setup
+}
+
 # Loads config file for the node. These are the config values from the headnode
 # plus authorized keys and anything else we want.
 # This function is only invoked on a compute node.
@@ -119,6 +138,8 @@ case "$1" in
     else
 	install_config
     fi
+
+    set_default_fw_rules
 
     if /bin/bootparams | grep "^headnode=true" > /dev/null 2>&1; then
         /usr/sbin/umount $USBMOUNT
