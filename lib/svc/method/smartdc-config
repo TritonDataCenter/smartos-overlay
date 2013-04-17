@@ -191,7 +191,9 @@ case "$1" in
     fi
     # set the clock on non-SDC installations
     if /bin/bootparams | grep "^smartos=true" >/dev/null 2>&1; then
-        ntpd -gq >/dev/null 2>&1
+        if [[ -n ${servers} ]]; then # networking guard
+          ntpdate -u -t 5 -- "${servers}" >/dev/null 2>&1
+        fi
     fi
     # set the keymap. For dvorak for instance
     if [[ -n ${CONFIG_default_keymap} ]]; then
