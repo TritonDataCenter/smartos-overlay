@@ -1,4 +1,22 @@
 if [ "$PS1" ]; then
+    mt_tty=$(/usr/bin/tty 2>/dev/null)
+    if [[ $mt_tty =~ ^/dev/term/[abcd] ]]; then
+        # If we're on the serial console, we generally won't know how
+        # big our terminal is.  Attempt to ask it using control sequences
+        # and resize our pty accordingly.
+        mt_output=$(/usr/lib/measure_terminal 2>/dev/null)
+        if [[ $? -eq 0 ]]; then
+            eval "$mt_output"
+        else
+            # We could not read the size, but we should set a 'sane'
+            # default as the dimensions of the previous user's terminal
+            # persist on the tty device.
+            export LINES=25
+            export COLUMNS=80
+        fi
+        /usr/bin/stty rows ${LINES} columns ${COLUMNS} 2>/dev/null
+    fi
+    unset mt_output mt_tty
     shopt -s checkwinsize
     if [[ -f /.dcinfo ]]; then
         . /.dcinfo
