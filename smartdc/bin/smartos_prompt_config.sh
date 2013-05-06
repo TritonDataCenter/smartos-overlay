@@ -564,8 +564,6 @@ if [ -f "${USB_PATH}/config" -a -n "${CONFIG_zpool_disks}" ]; then
         cp -rp /etc/ssh ${USB_PATH}/ssh
     fi
 
-    cp /usr/img/etc/sources.list.sample /var/db/imgadm/sources.list
-
     echo
     echo "This system was automatically configured and will now reboot"
 
