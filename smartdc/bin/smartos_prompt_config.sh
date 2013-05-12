@@ -564,6 +564,10 @@ if [ -f "${USB_PATH}/config" -a -n "${CONFIG_zpool_disks}" ]; then
         cp -rp /etc/ssh ${USB_PATH}/ssh
     fi
 
+    if [[ ! -d ${USB_PATH}/ipf ]]; then
+        cp -rp /etc/ipf ${USB_PATH}/ipf
+    fi
+
     echo
     echo "This system was automatically configured and will now reboot"
 
