@@ -67,6 +67,15 @@ RULES
     [[ $? -eq 0 ]] && touch /var/fw/.default_rules_setup
 }
 
+configure_fwadm()
+{
+    if [[ ! -d /var/log/fw/logs ]]; then
+        mkdir -p /var/log/fw/logs
+        mv /var/log/fw/*-*.log /var/log/fw/logs
+        touch /var/log/fw/fw.log
+    fi
+}
+
 # Loads config file for the node. These are the config values from the headnode
 # plus authorized keys and anything else we want.
 # This function is only invoked on a compute node.
@@ -140,6 +149,7 @@ case "$1" in
     fi
 
     set_default_fw_rules
+    configure_fwadm
 
     if /bin/bootparams | grep "^headnode=true" > /dev/null 2>&1; then
         /usr/sbin/umount $USBMOUNT
