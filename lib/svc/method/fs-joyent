@@ -19,7 +19,7 @@
 #
 # CDDL HEADER END
 #
-# Copyright (c) 2010,2011 Joyent Inc.
+# Copyright (c) 2013, Joyent, Inc.
 
 set -o xtrace
 
@@ -30,9 +30,9 @@ set -o xtrace
 
 smf_is_globalzone || exit $SMF_EXIT_OK
 
-# Need to run syseventd now because it talks to devfs to create /dev/dsk
-# so that we can try to import the zpool.
-/usr/lib/sysevent/syseventd
+# We need the links to /dev/dsk. Rather than trying to play games with manually
+# invoking syseventd ask devfsadm to do some work.
+/usr/sbin/devfsadm -c disk
 
 function destroy_zpools
 {
