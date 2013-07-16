@@ -72,6 +72,9 @@ configure_fwadm()
     if [[ ! -d /var/log/fw/logs ]]; then
         mkdir -p /var/log/fw/logs
         mv /var/log/fw/*-*.log /var/log/fw/logs
+    fi
+
+    if [[ ! -e /var/log/fw/fw.log ]]; then
         touch /var/log/fw/fw.log
     fi
 }
