@@ -49,7 +49,7 @@ if [ $? -ne 0 ]; then
     # identifies itself (by virtue of the .system_pool file being present in the
     # pool's root dataset), then use that system pool instead.
     SYS_ZPOOL=zones
-    
+
     # Import specified zpools, or all zpools available
     pools=$(/bin/bootparams | egrep "^zpools?=" | cut -d= -f2 | tr , ' ')
     if [ -z ${pools} ]; then
@@ -82,11 +82,11 @@ if [ $? -ne 0 ]; then
 
     # For the system zpool, mount and configure all system datasets
     zpool status -v ${SYS_ZPOOL}
-    if [ $? -eq 0 ]; then 
+    if [ $? -eq 0 ]; then
         mount -F zfs ${SYS_ZPOOL}/var /var
         mount -F zfs ${SYS_ZPOOL}/config /etc/zones
         mount -F zfs ${SYS_ZPOOL}/opt /opt
-        if [[ -n $(/bin/bootparams | grep '^headnode=true') ]]; then 
+        if [[ -n $(/bin/bootparams | grep '^headnode=true') ]]; then
           mkdir -p /opt/smartdc/agents/smf
           mount -O -F lofs /var/svc/manifest/site /opt/smartdc/agents/smf
         fi
@@ -102,6 +102,21 @@ if [ $? -ne 0 ]; then
   fi
 
   swap -a /dev/zvol/dsk/${SYS_ZPOOL}/swap
+
+        #
+        # Configure the dump device on top of a ZFS volume.  In addition to the
+        # usual dumpadm(1m) call, there are two prerequisites for using this
+        # volume as a dump device: (1) that zvol must be using the noparity
+        # checksum algorithem, and (2) the MULTI_VDEV_CRASH_DUMP ZFS feature
+        # must be enabled.  Prerequisite (1) is necessary since the exact
+        # on-disk value for ZIO_CHECKSUM_NOPARITY has changed, so to avoid a
+        # flag day on all systems, this service just sets that property again
+        # every time.
+        #
+        zfs set checksum=noparity ${SYS_ZPOOL}/dump || \
+            fatal "failed to set checksum=noparity on dump zvol"
+        zpool set feature@multi_vdev_crash_dump=enabled ${SYS_ZPOOL} || \
+            fatal "failed to enable multi_vdev_crash_dump ZFS feature"
 	dumpadm -y -d /dev/zvol/dsk/${SYS_ZPOOL}/dump
 
 	ln -s /${SYS_ZPOOL}/global/cores /cores
