@@ -23,6 +23,20 @@ declare -a nics
 declare -a assigned
 declare -a DISK_LIST
 
+
+get_bootparam()
+{
+    param=$1
+    params=$(/bin/bootparams)
+    # Try to lookup the boot param value
+    val=$(echo $params | sed "s/^\(.*,\)*${param}=\([^,]*\).*$/\2/")
+    # If we don't match the entire string is returned so we empty var
+    if [[ $val == $params ]]
+    then
+        val=""
+    fi
+}
+
 sigexit()
 {
 	echo
@@ -274,7 +288,8 @@ promptpool()
     printf "or 'all' for all the above"
     echo ""
     bad=""
-    read val
+    get_bootparam "disks"
+    [ -z "${val}" ] && read val
     if [[ $val == "" ]]; then
       echo "At least one disk must be specified"
       echo ""
@@ -412,12 +427,19 @@ create_zpool()
     disk_count=$(echo "${disks}" | wc -w | tr -d ' ')
     printf "%-56s" "Creating pool $pool... "
 
+    if [[ "${disk_count}" == "0" ]]
+    then
+        fatal "no disks found, can't create zpool"
+    fi
+
+    # Readthe pool_profile from boot params
+    get_bootparam "pool_profile"
+    profile="${val}"
+
     # If no pool profile was provided, use a default based on the number of
     # devices in that pool.
     if [[ -z ${profile} ]]; then
         case ${disk_count} in
-        0)
-             fatal "no disks found, can't create zpool";;
         1)
              profile="";;
         2)
@@ -432,26 +454,27 @@ create_zpool()
     # When creating a mirrored pool, create a mirrored pair of devices out of
     # every two disks.
     if [[ ${profile} == "mirror" ]]; then
-        ii=0
-        for disk in ${disks}; do
-            if [[ $(( $ii % 2 )) -eq 0 ]]; then
-                  zpool_args="${zpool_args} ${profile}"
-            fi
-            zpool_args="${zpool_args} ${disk}"
-            ii=$(($ii + 1))
-        done
+      ii=0
+      for disk in ${disks}; do
+        if [[ $(( $ii % 2 )) -eq 0 ]]; then
+          zpool_args="${zpool_args} ${profile}"
+        fi
+        zpool_args="${zpool_args} ${disk}"
+        ii=$(($ii + 1))
+      done
     elif [[ ${profile} == "raid10+2" ]]
-        for disk in ${disks}; do
-            if [[ $(( $ii % 2 )) -eq 0 ]]; then
-                  zpool_args="${zpool_args} ${profile}"
-            fi
-            zpool_args="${zpool_args} ${disk}"
-            ii=$(($ii + 1))
-        done
-        # Replace the last mirror with spares so we get two spare disks
-        zpool_args=$(echo "${zpool_args}" | sed 's/\(.*\)mirror/\1spare/')
+    then
+      for disk in ${disks}; do
+        if [[ $(( $ii % 2 )) -eq 0 ]]; then
+          zpool_args="${zpool_args} ${profile}"
+        fi
+        zpool_args="${zpool_args} ${disk}"
+        ii=$(($ii + 1))
+      done
+      # Replace the last mirror with spares so we get two spare disks
+      zpool_args=$(echo "${zpool_args}" | sed 's/\(.*\)mirror/\1spare/')
     else
-        zpool_args="${profile} ${disks}"
+      zpool_args="${profile} ${disks}"
     fi
 
     zpool create -f ${pool} ${zpool_args} || \
@@ -461,6 +484,7 @@ create_zpool()
 
     printf "%4s\n" "done"
 }
+
 create_zpools()
 {
   devs=$1
@@ -486,6 +510,7 @@ create_zpools()
   #
   touch /${SYS_ZPOOL}/.system_pool
 }
+
 updatenicstates()
 {
 	states=(1)
@@ -558,20 +583,22 @@ fi
 #
 while [ /usr/bin/true ]; do
 
-	printheader "Networking"
+  printheader "Networking"
 
-	promptnic "'admin'"
-	admin_nic="$val"
+  get_bootparam "admin_nic"
+  [ -z $val ] && promptnic "'admin'"
+  admin_nic="$val"
 
-	promptnet "IP address (or 'dhcp' )" "$admin_ip"
-	admin_ip="$val"
+  get_bootparam "admin_ip"
+  [ -z $val ] && promptnet "IP address (or 'dhcp' )" "$admin_ip"
+  admin_ip="$val"
   if [[ $admin_ip != 'dhcp' ]]; then
-    promptnet "netmask" "$admin_netmask"
+    get_bootparam "admin_netmask"
+    [ -z $val ] && promptnet "netmask" "$admin_netmask"
     admin_netmask="$val"
 
     printheader "Networking - Continued"
     message=""
-
     printf "$message"
 
     message="
@@ -580,35 +607,45 @@ while [ /usr/bin/true ]; do
 
     printf "$message"
 
-    promptnet "Enter the default gateway IP" "$headnode_default_gateway"
+    get_bootparam "gateway"
+    [ -z $val ] && promptnet "Enter the default gateway IP" "$headnode_default_gateway"
     headnode_default_gateway="$val"
 
-    promptval "Enter the Primary DNS server IP" "$dns_resolver1"
+    get_bootparam "dns1"
+    [ -z $val ] && promptval "Enter the Primary DNS server IP" "$dns_resolver1"
     dns_resolver1="$val"
-    promptval "Enter the Secondary DNS server IP" "$dns_resolver2"
+    get_bootparam "dns2"
+    [ -z $val ] && promptval "Enter the Secondary DNS server IP" "$dns_resolver2"
     dns_resolver2="$val"
-    promptval "Enter the domain name" "$domainname"
+    get_bootparam "domain"
+    [ -z $val ] && promptval "Enter the domain name" "$domainname"
     domainname="$val"
-    promptval "Default DNS search domain" "$dns_domain"
+    get_bootparam "search_domain"
+    [ -z $val ] && promptval "Default DNS search domain" "$dns_domain"
     dns_domain="$val"
   fi
-	printheader "Storage"
-	promptpool
+  printheader "Storage"
+  promptpool
 
-	printheader "Account Information"
+  printheader "Account Information"
 
-	promptpw "Enter root password" "nolen"
-	root_shadow="$val"
+  get_bootparam "root_pw"
+  if [[ "${val}" == "random" ]]
+  then
+    val=$(cat /dev/urandom | LC_CTYPE=C tr -dc '[:alpha:]0-9$:_+-' | fold -w 32 | head -n 1)
+  fi
+  [ -z "${val}" ] && promptpw "Enter root password" "nolen"
+  root_shadow="$val"
 
-	printheader "Verify Configuration"
-	message=""
+  printheader "Verify Configuration"
+  message=""
 
-	printf "$message"
+  printf "$message"
 
-	echo "Verify that the following values are correct:"
-	echo
-	echo "MAC address: $admin_nic"
-	echo "IP address: $admin_ip"
+  echo "Verify that the following values are correct:"
+  echo
+  echo "MAC address: $admin_nic"
+  echo "IP address: $admin_ip"
   if [[ $admin_ip != 'dhcp' ]]; then
     echo "Netmask: $admin_netmask"
     echo "Gateway router IP address: $headnode_default_gateway"
@@ -618,9 +655,14 @@ while [ /usr/bin/true ]; do
 	  echo "Domain name: $domainname"
     echo
   fi
-	promptval "Is this correct?" "y"
-	[ "$val" == "y" ] && break
-	clear
+  get_bootparam "unattended"
+  if [[ "${val}" == "true" ]]
+  then
+      break;
+  fi
+  promptval "Is this correct?" "y"
+  [ "$val" == "y" ] && break
+  clear
 done
 admin_network="$net_a.$net_b.$net_c.$net_d"
 
@@ -665,9 +707,14 @@ echo "compute_node_ntp_hosts=$admin_ip" >>$tmp_config
 echo >>$tmp_config
 
 echo
-echo "Your configuration is about to be applied."
-promptval "Would you like to edit the final configuration file?" "n"
-[ "$val" == "y" ] && vi $tmp_config
+get_bootparam "unattended"
+if [[ "${val}" != "true" ]]
+then
+  echo "Your configuration is about to be applied."
+  promptval "Would you like to edit the final configuration file?" "n"
+  [ "$val" == "y" ] && vi $tmp_config
+fi
+
 clear
 
 echo
@@ -676,8 +723,12 @@ echo $DISK_LIST
 echo "*********************************************"
 echo "* This will erase *ALL DATA* on these disks *"
 echo "*********************************************"
-promptval "are you sure?" "n"
-[ "$val" == "y" ] && (create_zpools "$DISK_LIST")
+get_bootparam "unattended"
+if [[ "${val}" != "true" ]]
+then
+  promptval "are you sure?" "n"
+  [ "$val" == "y" ] && (create_zpools "$DISK_LIST")
+fi
 
 clear
 echo "The system will now finish configuration and reboot. Please wait..."
