@@ -271,6 +271,7 @@ promptpool()
     echo "Please select disks for the storage pool, space separated"
     echo ""
     printf "Valid choices are ${disks}"
+    printf "or 'all' for all the above"
     echo ""
     bad=""
     read val
@@ -278,6 +279,10 @@ promptpool()
       echo "At least one disk must be specified"
       echo ""
       continue
+    fi
+    if [[ $val == "all" ]]; then
+        DISK_LIST="${disks}"
+        break
     fi
     for disk in $(echo $val | tr " " "\n"); do
       if [[ -z $disk ]]; then continue; fi;
