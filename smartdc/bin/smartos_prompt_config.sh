@@ -389,7 +389,7 @@ setup_datasets()
           zfs create -V ${size}mb ${SWAPVOL}
           swap -a /dev/zvol/dsk/${SWAPVOL}
     fi
-    printf "%4s\n" "done" 
+    printf "%4s\n" "done"
   fi
 }
 
@@ -405,7 +405,7 @@ create_zpool()
     fi
 
     disk_count=$(echo "${disks}" | wc -w | tr -d ' ')
-    printf "%-56s" "Creating pool $pool... " 
+    printf "%-56s" "Creating pool $pool... "
 
     # If no pool profile was provided, use a default based on the number of
     # devices in that pool.
@@ -435,6 +435,16 @@ create_zpool()
             zpool_args="${zpool_args} ${disk}"
             ii=$(($ii + 1))
         done
+    elif [[ ${profile} == "raid10+2" ]]
+        for disk in ${disks}; do
+            if [[ $(( $ii % 2 )) -eq 0 ]]; then
+                  zpool_args="${zpool_args} ${profile}"
+            fi
+            zpool_args="${zpool_args} ${disk}"
+            ii=$(($ii + 1))
+        done
+        # Replace the last mirror with spares so we get two spare disks
+        zpool_args=$(echo "${zpool_args}" | sed 's/\(.*\)mirror/\1spare/')
     else
         zpool_args="${profile} ${disks}"
     fi
@@ -444,7 +454,7 @@ create_zpool()
     zfs set atime=off ${pool} || \
         fatal "failed to set atime=off for pool ${pool}"
 
-    printf "%4s\n" "done" 
+    printf "%4s\n" "done"
 }
 create_zpools()
 {
@@ -463,7 +473,7 @@ create_zpools()
   export VARDS=${SYS_ZPOOL}/var
   export USBKEYDS=${SYS_ZPOOL}/usbkey
   export SWAPVOL=${SYS_ZPOOL}/swap
-  
+
   setup_datasets
   #
   # Since there may be more than one storage pool on the system, put a
