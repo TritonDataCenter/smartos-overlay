@@ -242,7 +242,7 @@ promptpw()
 				else
 	 				break
 				fi
-			else 
+			else
 				echo "A value must be provided."
 			fi
 		done
@@ -293,7 +293,7 @@ promptpool()
       break
     fi
   done
-  
+
 }
 
 create_dump()
@@ -319,50 +319,50 @@ create_dump()
 setup_datasets()
 {
   datasets=$(zfs list -H -o name | xargs)
-  
+
   if ! echo $datasets | grep dump > /dev/null; then
-    printf "%-56s" "Making dump zvol... " 
+    printf "%-56s" "Making dump zvol... "
     create_dump
-    printf "%4s\n" "done" 
+    printf "%4s\n" "done"
   fi
 
   if ! echo $datasets | grep ${CONFDS} > /dev/null; then
-    printf "%-56s" "Initializing config dataset for zones... " 
+    printf "%-56s" "Initializing config dataset for zones... "
     zfs create ${CONFDS} || fatal "failed to create the config dataset"
     chmod 755 /${CONFDS}
     cp -p /etc/zones/* /${CONFDS}
     zfs set mountpoint=legacy ${CONFDS}
-    printf "%4s\n" "done" 
+    printf "%4s\n" "done"
   fi
 
   if ! echo $datasets | grep ${USBKEYDS} > /dev/null; then
     if [[ -n $(/bin/bootparams | grep "^smartos=true") ]]; then
-        printf "%-56s" "Creating config dataset... " 
+        printf "%-56s" "Creating config dataset... "
         zfs create -o mountpoint=legacy ${USBKEYDS} || \
           fatal "failed to create the config dataset"
         mkdir /usbkey
         mount -F zfs ${USBKEYDS} /usbkey
-        printf "%4s\n" "done" 
+        printf "%4s\n" "done"
     fi
   fi
 
   if ! echo $datasets | grep ${COREDS} > /dev/null; then
-    printf "%-56s" "Creating global cores dataset... " 
+    printf "%-56s" "Creating global cores dataset... "
     zfs create -o quota=10g -o mountpoint=/${SYS_ZPOOL}/global/cores \
         -o compression=gzip ${COREDS} || \
         fatal "failed to create the cores dataset"
-    printf "%4s\n" "done" 
+    printf "%4s\n" "done"
   fi
 
   if ! echo $datasets | grep ${OPTDS} > /dev/null; then
-    printf "%-56s" "Creating opt dataset... " 
+    printf "%-56s" "Creating opt dataset... "
     zfs create -o mountpoint=legacy ${OPTDS} || \
       fatal "failed to create the opt dataset"
-    printf "%4s\n" "done" 
+    printf "%4s\n" "done"
   fi
 
   if ! echo $datasets | grep ${VARDS} > /dev/null; then
-    printf "%-56s" "Initializing var dataset... " 
+    printf "%-56s" "Initializing var dataset... "
     zfs create ${VARDS} || \
       fatal "failed to create the var dataset"
     chmod 755 /${VARDS}
@@ -374,7 +374,7 @@ setup_datasets()
     zfs set mountpoint=legacy ${VARDS}
 
     if ! echo $datasets | grep ${SWAPVOL} > /dev/null; then
-          printf "%-56s" "Creating swap zvol... " 
+          printf "%-56s" "Creating swap zvol... "
           #
           # We cannot allow the swap size to be less than the size of DRAM, lest$
           # we run into the availrmem double accounting issue for locked$
@@ -490,16 +490,16 @@ updatenicstates()
 	done < <(dladm show-phys -po link,state 2>/dev/null)
 }
 
-printheader() 
+printheader()
 {
   local newline=
   local cols=`tput cols`
   local subheader=$1
-  
+
   if [ $cols -gt 80 ] ;then
     newline='\n'
   fi
-  
+
   clear
   for i in {1..80} ; do printf "-" ; done && printf "$newline"
   printf " %-40s\n" "SmartOS Setup"
@@ -553,8 +553,8 @@ fi
 #
 while [ /usr/bin/true ]; do
 
-	printheader "Networking" 
-	
+	printheader "Networking"
+
 	promptnic "'admin'"
 	admin_nic="$val"
 
@@ -566,7 +566,7 @@ while [ /usr/bin/true ]; do
 
     printheader "Networking - Continued"
     message=""
-    
+
     printf "$message"
 
     message="
@@ -586,18 +586,18 @@ while [ /usr/bin/true ]; do
     domainname="$val"
     promptval "Default DNS search domain" "$dns_domain"
     dns_domain="$val"
-  fi	
+  fi
 	printheader "Storage"
 	promptpool
- 
+
 	printheader "Account Information"
-	
+
 	promptpw "Enter root password" "nolen"
 	root_shadow="$val"
 
 	printheader "Verify Configuration"
 	message=""
-  
+
 	printf "$message"
 
 	echo "Verify that the following values are correct:"
