@@ -23,20 +23,6 @@ declare -a nics
 declare -a assigned
 declare -a DISK_LIST
 
-#
-# Reads a boot parameters returns the assigned value for a given key.
-# If the key is not found an empty string is returned.
-# The data is stored in $val.
-#
-get_bootparam()
-{
-    val=""
-    if /bin/bootparams | grep "^$1=" > /dev/null 2>&1
-    then
-        val=$(/bin/bootparams | grep "^$1=" | sed "s/^$1=//")
-    fi
-}
-
 sigexit()
 {
 	echo
@@ -256,7 +242,7 @@ promptpw()
 				else
 	 				break
 				fi
-			else
+			else 
 				echo "A value must be provided."
 			fi
 		done
@@ -285,19 +271,13 @@ promptpool()
     echo "Please select disks for the storage pool, space separated"
     echo ""
     printf "Valid choices are ${disks}"
-    printf "or 'all' for all the above"
     echo ""
     bad=""
-    get_bootparam "disks"
-    [ -z "${val}" ] && read val
+    read val
     if [[ $val == "" ]]; then
       echo "At least one disk must be specified"
       echo ""
       continue
-    fi
-    if [[ $val == "all" ]]; then
-        DISK_LIST="${disks}"
-        break
     fi
     for disk in $(echo $val | tr " " "\n"); do
       if [[ -z $disk ]]; then continue; fi;
@@ -313,7 +293,7 @@ promptpool()
       break
     fi
   done
-
+  
 }
 
 create_dump()
@@ -339,50 +319,50 @@ create_dump()
 setup_datasets()
 {
   datasets=$(zfs list -H -o name | xargs)
-
+  
   if ! echo $datasets | grep dump > /dev/null; then
-    printf "%-56s" "Making dump zvol... "
+    printf "%-56s" "Making dump zvol... " 
     create_dump
-    printf "%4s\n" "done"
+    printf "%4s\n" "done" 
   fi
 
   if ! echo $datasets | grep ${CONFDS} > /dev/null; then
-    printf "%-56s" "Initializing config dataset for zones... "
+    printf "%-56s" "Initializing config dataset for zones... " 
     zfs create ${CONFDS} || fatal "failed to create the config dataset"
     chmod 755 /${CONFDS}
     cp -p /etc/zones/* /${CONFDS}
     zfs set mountpoint=legacy ${CONFDS}
-    printf "%4s\n" "done"
+    printf "%4s\n" "done" 
   fi
 
   if ! echo $datasets | grep ${USBKEYDS} > /dev/null; then
     if [[ -n $(/bin/bootparams | grep "^smartos=true") ]]; then
-        printf "%-56s" "Creating config dataset... "
+        printf "%-56s" "Creating config dataset... " 
         zfs create -o mountpoint=legacy ${USBKEYDS} || \
           fatal "failed to create the config dataset"
         mkdir /usbkey
         mount -F zfs ${USBKEYDS} /usbkey
-        printf "%4s\n" "done"
+        printf "%4s\n" "done" 
     fi
   fi
 
   if ! echo $datasets | grep ${COREDS} > /dev/null; then
-    printf "%-56s" "Creating global cores dataset... "
+    printf "%-56s" "Creating global cores dataset... " 
     zfs create -o quota=10g -o mountpoint=/${SYS_ZPOOL}/global/cores \
         -o compression=gzip ${COREDS} || \
         fatal "failed to create the cores dataset"
-    printf "%4s\n" "done"
+    printf "%4s\n" "done" 
   fi
 
   if ! echo $datasets | grep ${OPTDS} > /dev/null; then
-    printf "%-56s" "Creating opt dataset... "
+    printf "%-56s" "Creating opt dataset... " 
     zfs create -o mountpoint=legacy ${OPTDS} || \
       fatal "failed to create the opt dataset"
-    printf "%4s\n" "done"
+    printf "%4s\n" "done" 
   fi
 
   if ! echo $datasets | grep ${VARDS} > /dev/null; then
-    printf "%-56s" "Initializing var dataset... "
+    printf "%-56s" "Initializing var dataset... " 
     zfs create ${VARDS} || \
       fatal "failed to create the var dataset"
     chmod 755 /${VARDS}
@@ -394,7 +374,7 @@ setup_datasets()
     zfs set mountpoint=legacy ${VARDS}
 
     if ! echo $datasets | grep ${SWAPVOL} > /dev/null; then
-          printf "%-56s" "Creating swap zvol... "
+          printf "%-56s" "Creating swap zvol... " 
           #
           # We cannot allow the swap size to be less than the size of DRAM, lest$
           # we run into the availrmem double accounting issue for locked$
@@ -409,7 +389,7 @@ setup_datasets()
           zfs create -V ${size}mb ${SWAPVOL}
           swap -a /dev/zvol/dsk/${SWAPVOL}
     fi
-    printf "%4s\n" "done"
+    printf "%4s\n" "done" 
   fi
 }
 
@@ -425,21 +405,14 @@ create_zpool()
     fi
 
     disk_count=$(echo "${disks}" | wc -w | tr -d ' ')
-    printf "%-56s" "Creating pool $pool... "
-
-    if [[ "${disk_count}" == "0" ]]
-    then
-        fatal "no disks found, can't create zpool"
-    fi
-
-    # Readthe pool_profile from boot params
-    get_bootparam "pool_profile"
-    profile="${val}"
+    printf "%-56s" "Creating pool $pool... " 
 
     # If no pool profile was provided, use a default based on the number of
     # devices in that pool.
     if [[ -z ${profile} ]]; then
         case ${disk_count} in
+        0)
+             fatal "no disks found, can't create zpool";;
         1)
              profile="";;
         2)
@@ -454,27 +427,16 @@ create_zpool()
     # When creating a mirrored pool, create a mirrored pair of devices out of
     # every two disks.
     if [[ ${profile} == "mirror" ]]; then
-      ii=0
-      for disk in ${disks}; do
-        if [[ $(( $ii % 2 )) -eq 0 ]]; then
-          zpool_args="${zpool_args} ${profile}"
-        fi
-        zpool_args="${zpool_args} ${disk}"
-        ii=$(($ii + 1))
-      done
-    elif [[ ${profile} == "raid10+2" ]]
-    then
-      for disk in ${disks}; do
-        if [[ $(( $ii % 2 )) -eq 0 ]]; then
-          zpool_args="${zpool_args} ${profile}"
-        fi
-        zpool_args="${zpool_args} ${disk}"
-        ii=$(($ii + 1))
-      done
-      # Replace the last mirror with spares so we get two spare disks
-      zpool_args=$(echo "${zpool_args}" | sed 's/\(.*\)mirror/\1spare/')
+        ii=0
+        for disk in ${disks}; do
+            if [[ $(( $ii % 2 )) -eq 0 ]]; then
+                  zpool_args="${zpool_args} ${profile}"
+            fi
+            zpool_args="${zpool_args} ${disk}"
+            ii=$(($ii + 1))
+        done
     else
-      zpool_args="${profile} ${disks}"
+        zpool_args="${profile} ${disks}"
     fi
 
     zpool create -f ${pool} ${zpool_args} || \
@@ -482,9 +444,8 @@ create_zpool()
     zfs set atime=off ${pool} || \
         fatal "failed to set atime=off for pool ${pool}"
 
-    printf "%4s\n" "done"
+    printf "%4s\n" "done" 
 }
-
 create_zpools()
 {
   devs=$1
@@ -502,7 +463,7 @@ create_zpools()
   export VARDS=${SYS_ZPOOL}/var
   export USBKEYDS=${SYS_ZPOOL}/usbkey
   export SWAPVOL=${SYS_ZPOOL}/swap
-
+  
   setup_datasets
   #
   # Since there may be more than one storage pool on the system, put a
@@ -510,7 +471,6 @@ create_zpools()
   #
   touch /${SYS_ZPOOL}/.system_pool
 }
-
 updatenicstates()
 {
 	states=(1)
@@ -520,16 +480,16 @@ updatenicstates()
 	done < <(dladm show-phys -po link,state 2>/dev/null)
 }
 
-printheader()
+printheader() 
 {
   local newline=
   local cols=`tput cols`
   local subheader=$1
-
+  
   if [ $cols -gt 80 ] ;then
     newline='\n'
   fi
-
+  
   clear
   for i in {1..80} ; do printf "-" ; done && printf "$newline"
   printf " %-40s\n" "SmartOS Setup"
@@ -583,22 +543,20 @@ fi
 #
 while [ /usr/bin/true ]; do
 
-  printheader "Networking"
+	printheader "Networking" 
+	
+	promptnic "'admin'"
+	admin_nic="$val"
 
-  get_bootparam "admin_nic"
-  [ -z $val ] && promptnic "'admin'"
-  admin_nic="$val"
-
-  get_bootparam "admin_ip"
-  [ -z $val ] && promptnet "IP address (or 'dhcp' )" "$admin_ip"
-  admin_ip="$val"
+	promptnet "IP address (or 'dhcp' )" "$admin_ip"
+	admin_ip="$val"
   if [[ $admin_ip != 'dhcp' ]]; then
-    get_bootparam "admin_netmask"
-    [ -z $val ] && promptnet "netmask" "$admin_netmask"
+    promptnet "netmask" "$admin_netmask"
     admin_netmask="$val"
 
     printheader "Networking - Continued"
     message=""
+    
     printf "$message"
 
     message="
@@ -607,45 +565,35 @@ while [ /usr/bin/true ]; do
 
     printf "$message"
 
-    get_bootparam "gateway"
-    [ -z $val ] && promptnet "Enter the default gateway IP" "$headnode_default_gateway"
+    promptnet "Enter the default gateway IP" "$headnode_default_gateway"
     headnode_default_gateway="$val"
 
-    get_bootparam "dns1"
-    [ -z $val ] && promptval "Enter the Primary DNS server IP" "$dns_resolver1"
+    promptval "Enter the Primary DNS server IP" "$dns_resolver1"
     dns_resolver1="$val"
-    get_bootparam "dns2"
-    [ -z $val ] && promptval "Enter the Secondary DNS server IP" "$dns_resolver2"
+    promptval "Enter the Secondary DNS server IP" "$dns_resolver2"
     dns_resolver2="$val"
-    get_bootparam "domain"
-    [ -z $val ] && promptval "Enter the domain name" "$domainname"
+    promptval "Enter the domain name" "$domainname"
     domainname="$val"
-    get_bootparam "search_domain"
-    [ -z $val ] && promptval "Default DNS search domain" "$dns_domain"
+    promptval "Default DNS search domain" "$dns_domain"
     dns_domain="$val"
-  fi
-  printheader "Storage"
-  promptpool
+  fi	
+	printheader "Storage"
+	promptpool
+ 
+	printheader "Account Information"
+	
+	promptpw "Enter root password" "nolen"
+	root_shadow="$val"
 
-  printheader "Account Information"
+	printheader "Verify Configuration"
+	message=""
+  
+	printf "$message"
 
-  get_bootparam "root_pw"
-  if [[ "${val}" == "random" ]]
-  then
-    val=$(cat /dev/urandom | LC_CTYPE=C tr -dc '[:alpha:]0-9$:_+-' | fold -w 32 | head -n 1)
-  fi
-  [ -z "${val}" ] && promptpw "Enter root password" "nolen"
-  root_shadow="$val"
-
-  printheader "Verify Configuration"
-  message=""
-
-  printf "$message"
-
-  echo "Verify that the following values are correct:"
-  echo
-  echo "MAC address: $admin_nic"
-  echo "IP address: $admin_ip"
+	echo "Verify that the following values are correct:"
+	echo
+	echo "MAC address: $admin_nic"
+	echo "IP address: $admin_ip"
   if [[ $admin_ip != 'dhcp' ]]; then
     echo "Netmask: $admin_netmask"
     echo "Gateway router IP address: $headnode_default_gateway"
@@ -655,14 +603,9 @@ while [ /usr/bin/true ]; do
 	  echo "Domain name: $domainname"
     echo
   fi
-  get_bootparam "unattended"
-  if [[ "${val}" == "true" ]]
-  then
-      break;
-  fi
-  promptval "Is this correct?" "y"
-  [ "$val" == "y" ] && break
-  clear
+	promptval "Is this correct?" "y"
+	[ "$val" == "y" ] && break
+	clear
 done
 admin_network="$net_a.$net_b.$net_c.$net_d"
 
@@ -707,14 +650,9 @@ echo "compute_node_ntp_hosts=$admin_ip" >>$tmp_config
 echo >>$tmp_config
 
 echo
-get_bootparam "unattended"
-if [[ "${val}" != "true" ]]
-then
-  echo "Your configuration is about to be applied."
-  promptval "Would you like to edit the final configuration file?" "n"
-  [ "$val" == "y" ] && vi $tmp_config
-fi
-
+echo "Your configuration is about to be applied."
+promptval "Would you like to edit the final configuration file?" "n"
+[ "$val" == "y" ] && vi $tmp_config
 clear
 
 echo
@@ -723,12 +661,8 @@ echo $DISK_LIST
 echo "*********************************************"
 echo "* This will erase *ALL DATA* on these disks *"
 echo "*********************************************"
-get_bootparam "unattended"
-if [[ "${val}" != "true" ]]
-then
-  promptval "are you sure?" "n"
-  [ "$val" == "y" ] && (create_zpools "$DISK_LIST")
-fi
+promptval "are you sure?" "n"
+[ "$val" == "y" ] && (create_zpools "$DISK_LIST")
 
 clear
 echo "The system will now finish configuration and reboot. Please wait..."
