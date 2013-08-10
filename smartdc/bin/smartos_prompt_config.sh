@@ -23,17 +23,17 @@ declare -a nics
 declare -a assigned
 declare -a DISK_LIST
 
-
+#
+# Reads a boot parameters returns the assigned value for a given key.
+# If the key is not found an empty string is returned.
+# The data is stored in $val.
+#
 get_bootparam()
 {
-    param=$1
-    params=$(/bin/bootparams)
-    # Try to lookup the boot param value
-    val=$(echo $params | sed "s/^\(.*,\)*${param}=\([^,]*\).*$/\2/")
-    # If we don't match the entire string is returned so we empty var
-    if [[ $val == $params ]]
+    val=""
+    if /bin/bootparams | grep "^$1=" > /dev/null 2>&1
     then
-        val=""
+        val=$(/bin/bootparams | grep "^$1=" | sed "s/^$1=//")
     fi
 }
 
