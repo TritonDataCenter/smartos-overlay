@@ -56,6 +56,17 @@ set_ntp_hosts() {
 case "$1" in
 'start')
 
+    # If purge is defined we want to purge the defined datasets
+    if /bin/bootparams | grep "^purge=" > /dev/null 2>&1
+    then
+        for pool in $(/bin/bootparams | grep "^purge=" | sed "s/^purge=//" | sed 's/,/ /g')
+        do
+            echo "Purging pool $pool."
+            zpool import $pool
+            zpool destroy $pool
+        done
+        halt
+    fi
     # If we're a headnode, see if we have to do interactive configuration.
     if /bin/bootparams | grep "^headnode=true" > /dev/null 2>&1; then
         USB_PATH=/mnt/`svcprop -p "joyentfs/usb_mountpoint" svc:/system/filesystem/smartdc:default`
@@ -104,8 +115,9 @@ case "$1" in
                 # Skipping interactive config, bypass rest of script.
                 exit $SMF_EXIT_OK
             fi
-
-            if /bin/bootparams | grep "^unattended=true" > /dev/null 2>&1; then
+            if /bin/bootparams | grep "^unattended=true" > /dev/null 2>&1
+            then
+                echo "This host uses the unattended configuratio mode."
                 /smartdc/bin/smartos_unattended_config.sh "${USB_PATH}"
             else
                 /smartdc/bin/smartos_prompt_config.sh "${USB_PATH}" \
