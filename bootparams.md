@@ -161,3 +161,13 @@ A URL for a bash script to be executed after the installer has finished, this sc
 ```
 run_script=http://10.0.0.1/bootstrap/init.sh
 ```
+
+ 
+# Example PXE file
+```
+#!ipxe
+
+kernel /smartos/20130808T195337Z/platform/i86pc/kernel/amd64/unix -B smartos=true,unattended=true,admin_nic=igb0,admin_ip=dhcp,root_pw=random,disks=all,pool_profile=raid10+2,run_script='http://10.0.0.1/FiFo/bootstrap/bootstrap.sh'
+initrd /smartos/20130808T195337Z/platform/i86pc/amd64/boot_archive
+boot
+```
