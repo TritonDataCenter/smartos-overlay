@@ -114,6 +114,7 @@ setup_datasets()
         printf "%-56s" "Initializing var dataset... "
         zfs create ${VARDS} || \
             fatal "failed to create the var dataset"
+        printf "%4s\n" "done"
         chmod 755 /${VARDS}
         cd /var
         if ( ! find . -print | cpio -pdm /${VARDS} 2>/dev/null ); then
@@ -192,9 +193,10 @@ create_zpool()
         done
     elif [[ ${profile} == "raid10+2" ]]
     then
+        ii=0
         for disk in ${disks}; do
             if [[ $(( $ii % 2 )) -eq 0 ]]; then
-                zpool_args="${zpool_args} ${profile}"
+                zpool_args="${zpool_args} mirror"
             fi
             zpool_args="${zpool_args} ${disk}"
             ii=$(($ii + 1))
@@ -250,7 +252,6 @@ printheader()
         newline='\n'
     fi
 
-    clear
     for i in {1..80} ; do printf "-" ; done && printf "$newline"
     printf " %-40s\n" "SmartOS Setup"
     printf " %-40s%38s\n" "$subheader" "http://wiki.smartos.org/install"
@@ -261,7 +262,6 @@ printheader()
 trap sigexit SIGINT
 
 ifconfig -a plumb
-updatenicstates
 
 export TERM=sun-color
 export TERM=xterm-color
@@ -384,7 +384,8 @@ echo >>$tmp_config
 
 echo
 
-clear
+create_zpools "$DISK_LIST"
+
 echo "The system will now finish configuration and reboot. Please wait..."
 mv $tmp_config /usbkey/config
 
@@ -418,7 +419,7 @@ then
         /etc/init.d/nscd stop
         /etc/init.d/nscd start
     fi
-    bash < $(curl -kL ${final_script})
+    bash <(curl -kL ${script})
 fi
 
 reboot
