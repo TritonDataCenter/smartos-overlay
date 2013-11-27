@@ -74,8 +74,39 @@ configure_fwadm()
         mv /var/log/fw/*-*.log /var/log/fw/logs
     fi
 
-    if [[ ! -e /var/log/fw/fw.log ]]; then
-        touch /var/log/fw/fw.log
+    # See also OS-2635
+    if [[ -f /var/log/fw/fw.log.0 ]]; then
+        for file in /var/log/fw/fw.log.[0-9]*; do
+            mv ${file} "/var/log/fw/fwadm_$(uname -n)_$(stat -c "%y" ${file} | cut -d'.' -f1 | tr ' ' 'T').log"
+        done
+    fi
+    if [[ -f /var/log/fw/fw.log ]]; then
+        mv /var/log/fw/fw.log /var/log/fw/fwadm.log
+    fi
+
+    if [[ ! -e /var/log/fw/fwadm.log ]]; then
+        touch /var/log/fw/fwadm.log
+    fi
+}
+
+configure_vmadm()
+{
+    # ensure /var/log/vm exists for VM.log logs
+    mkdir -p /var/log/vm/logs
+
+    # See also OS-2635
+    if [[ -f /var/log/vm/vm.log.0 ]]; then
+        for file in /var/log/vm/vm.log.[0-9]*; do
+            mv ${file} "/var/log/vm/vmadm_$(uname -n)_$(stat -c "%y" ${file} | cut -d'.' -f1 | tr ' ' 'T').log"
+        done
+    fi
+    if [[ -f /var/log/vm/vm.log ]]; then
+        mv /var/log/vm/vm.log /var/log/vm/vmadm.log
+    fi
+
+    # need to create this file so rotation works
+    if [[ ! -e /var/log/vm/vmadm.log ]]; then
+        touch /var/log/vm/vmadm.log
     fi
 }
 
@@ -153,6 +184,7 @@ case "$1" in
 
     set_default_fw_rules
     configure_fwadm
+    configure_vmadm
 
     if /bin/bootparams | grep "^headnode=true" > /dev/null 2>&1; then
         /usr/sbin/umount $USBMOUNT
