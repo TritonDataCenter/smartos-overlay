@@ -58,7 +58,8 @@ set_default_fw_rules() {
   {
     "description": "allow pings to all VMs",
     "rule": "FROM any TO all vms ALLOW icmp type 8 code 0",
-    "enabled": true
+    "enabled": true,
+    "global": true
   }
   ]
 }
