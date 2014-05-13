@@ -19,7 +19,7 @@
 #
 # CDDL HEADER END
 #
-# Copyright (c) 2013, Joyent, Inc.
+# Copyright 2014, Joyent, Inc. All rights reserved.
 
 set -o xtrace
 
@@ -58,6 +58,9 @@ if [ $? -ne 0 ]; then
 
     for pool in $pools; do
         zpool import -f $pool
+	# Due to early, failed attempts to support the filesystem_limits
+	# feature we now need to ensure the dependent feature is enabled.
+	zpool set feature@extensible_dataset=enabled $pool
         if [[ -f /$pool/.system_pool ]]; then
             SYS_ZPOOL=$pool
         fi
