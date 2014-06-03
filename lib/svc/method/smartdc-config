@@ -42,13 +42,37 @@ set_root_password() {
 set_ntp_hosts() {
     ntp_hosts=$1
 
-    (
-    for i in $(echo ${ntp_hosts} | sed -e "s/,/ /g"); do
-        echo "server ${i}"
-    done
-    if [[ -f /etc/inet/ntp.conf ]]; then
-        cat /etc/inet/ntp.conf | grep -v "^server"
+    if [[ ! -f /etc/inet/ntp.conf.template ]]; then
+        echo "FATAL: missing /etc/inet/ntp.conf.template, cannot setup NTP" >&2
+        return ${SMF_EXIT_ERR_CONFIG}
     fi
+
+    (
+    cat /etc/inet/ntp.conf.template
+
+    if [[ -n ${CONFIG_admin_network} && -n ${CONFIG_admin_netmask} ]]; then
+        cat <<EOF
+
+# Allow localhost & Admin network
+restrict 127.0.0.1
+restrict ${CONFIG_admin_network} mask ${CONFIG_admin_netmask}
+
+# Specify Time Servers with ACL to allow them
+EOF
+    else
+        cat <<EOF
+
+# Allow localhost (admin_network and admin_netmask missing from config)
+restrict 127.0.0.1
+
+# Specify Time Servers with ACL to allow them
+EOF
+    fi
+
+    for i in $(echo ${ntp_hosts} | sed -e "s/,/ /g"); do
+        echo "server ${i} burst iburst minpoll 4"
+        echo "restrict ${i}"
+    done
     ) > /etc/inet/ntp.conf.new \
     && mv /etc/inet/ntp.conf.new /etc/inet/ntp.conf
 }
