@@ -13,7 +13,7 @@ load_sdc_config
 # Defaults
 datacenter_headnode_id=0
 mail_to="root@localhost"
-ntp_hosts="pool.ntp.org"
+ntp_hosts="0.smartos.pool.ntp.org"
 dns_resolver1="8.8.8.8"
 dns_resolver2="8.8.4.4"
 
