@@ -20,8 +20,8 @@
 # CDDL HEADER END
 #
 #
-# Copyright 2011 Joyent, Inc.  All rights reserved.
-# Use is subject to license terms.
+# Copyright 2014 Joyent, Inc.  All rights reserved.
+#
 
 set -o errexit
 set -o xtrace
@@ -37,44 +37,6 @@ set_root_password() {
     sed -e "s|^root:[^\:]*:|root:${enc_password}:|" /etc/shadow > /etc/shadow.new \
       && chmod 400 /etc/shadow.new \
       && mv /etc/shadow.new /etc/shadow
-}
-
-set_ntp_hosts() {
-    ntp_hosts=$1
-
-    if [[ ! -f /etc/inet/ntp.conf.template ]]; then
-        echo "FATAL: missing /etc/inet/ntp.conf.template, cannot setup NTP" >&2
-        return ${SMF_EXIT_ERR_CONFIG}
-    fi
-
-    (
-    cat /etc/inet/ntp.conf.template
-
-    if [[ -n ${CONFIG_admin_network} && -n ${CONFIG_admin_netmask} ]]; then
-        cat <<EOF
-
-# Allow localhost & Admin network
-restrict 127.0.0.1
-restrict ${CONFIG_admin_network} mask ${CONFIG_admin_netmask}
-
-# Specify Time Servers with ACL to allow them
-EOF
-    else
-        cat <<EOF
-
-# Allow localhost (admin_network and admin_netmask missing from config)
-restrict 127.0.0.1
-
-# Specify Time Servers with ACL to allow them
-EOF
-    fi
-
-    for i in $(echo ${ntp_hosts} | sed -e "s/,/ /g"); do
-        echo "server ${i} burst iburst minpoll 4"
-        echo "restrict ${i}"
-    done
-    ) > /etc/inet/ntp.conf.new \
-    && mv /etc/inet/ntp.conf.new /etc/inet/ntp.conf
 }
 
 case "$1" in
@@ -178,41 +140,48 @@ case "$1" in
         && [[ -n "${CONFIG_config_inc_dir}" ]] \
         && [[ -d "${CONFIG_config_inc_dir}" ]] \
         && [[ -f "${CONFIG_config_inc_dir}/${CONFIG_ntp_conf_file}" ]]; then
-
-        cp "${CONFIG_config_inc_dir}/${CONFIG_ntp_conf_file}" /etc/inet/ntp.conf
-        echo "Copied ntp config."
-
-    elif [[ -n "${CONFIG_ntp_hosts}" ]]; then
-        # split on ',' and resolve bits that aren't IP addresses then merge back
-        servers=""
-        for entry in $(echo "${CONFIG_ntp_hosts}" | tr ',' ' '); do
-            if echo "${entry}" | grep "^[0-9,\.]*$" >/dev/null 2>&1; then
-                # entry is an IP
-                [[ -n ${servers} ]] && entry=",${entry}"
-                servers="${servers}${entry}"
-            else
-                # DNS, try to resolve
-                for s in $( (dig ${entry} +short || /bin/true) | grep "^[0-9]" | xargs); do
-                    [[ -n ${servers} ]] && s=",${s}"
-                    servers="${servers}${s}"
-                done
-            fi
-        done
-
-        if [[ -n ${servers} ]]; then
-            set_ntp_hosts "${servers}"
-            echo "Set ntp hosts (${servers})."
-        fi
+        #
+        # We were given a valid NTP configuration file, so use it without
+        # modification:
+        #
+        cp "${CONFIG_config_inc_dir}/${CONFIG_ntp_conf_file}" \
+          /etc/inet/ntp.conf
+        echo "Copied NTP configuration."
     else
-        # No NTP hosts set, use some from pool.ntp.org
-        servers=$( (dig pool.ntp.org +short || /bin/true) | grep "^[0-9]" | xargs | sed -e "s/ /,/g")
-
-        # Note, if we don't find some here, we just go with ones already in the file.
-        if [[ -n ${servers} ]]; then
-            set_ntp_hosts "${servers}"
-            echo "Set default ntp hosts (${servers})."
+        #
+        # If we have an admin network defined, allow time service from this
+        # network:
+        #
+        ntp_aflag=
+        if [[ -n ${CONFIG_admin_network} && -n ${CONFIG_admin_netmask} ]]; then
+            if [[ "${CONFIG_admin_network}" != "..." ]]; then
+                ntp_aflag="-a ${CONFIG_admin_network}/${CONFIG_admin_netmask}"
+            fi
         fi
+
+        #
+        # If we were given a list of servers, use it:
+        #
+        ntp_hosts="${CONFIG_ntp_hosts}"
+        if [[ -z "${ntp_hosts}" ]]; then
+            #
+            # Otherwise, use the default SmartOS vendor pool from the NTP
+            # Pool Project:
+            #
+            ntp_hosts='0.smartos.pool.ntp.org'
+        fi
+
+        #
+        # Generate NTP configuration:
+        #
+        if ! /smartdc/lib/ntp_config -f /etc/inet/ntp.conf \
+          -s "${ntp_hosts}" ${ntp_aflag}; then
+            echo "FATAL: could not configure NTP" >&2
+            exit ${SMF_EXIT_ERR_CONFIG}
+        fi
+        echo "Generated NTP configuration."
     fi
+
     # set the keymap. For dvorak for instance
     if [[ -n ${CONFIG_default_keymap} ]]; then
         /usr/bin/loadkeys ${CONFIG_default_keymap}
