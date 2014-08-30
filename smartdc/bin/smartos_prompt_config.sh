@@ -616,6 +616,8 @@ while [ /usr/bin/true ]; do
 	[ "$val" == "y" ] && break
 	clear
 done
+
+ip_netmask_to_network $admin_ip $admin_netmask
 admin_network="$net_a.$net_b.$net_c.$net_d"
 
 #
