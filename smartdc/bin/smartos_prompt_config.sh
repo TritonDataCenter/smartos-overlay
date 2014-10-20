@@ -563,6 +563,9 @@ while [ /usr/bin/true ]; do
     promptnet "netmask" "$admin_netmask"
     admin_netmask="$val"
 
+    ip_netmask_to_network $admin_ip $admin_netmask
+    admin_network="$net_a.$net_b.$net_c.$net_d"
+
     printheader "Networking - Continued"
     message=""
     
@@ -616,8 +619,6 @@ while [ /usr/bin/true ]; do
 	[ "$val" == "y" ] && break
 	clear
 done
-ip_netmask_to_network $admin_ip $admin_netmask
-admin_network="$net_a.$net_b.$net_c.$net_d"
 
 #
 # Generate config file
