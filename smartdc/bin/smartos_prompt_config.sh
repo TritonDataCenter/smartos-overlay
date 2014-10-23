@@ -673,7 +673,11 @@ echo "*********************************************"
 echo "* This will erase *ALL DATA* on these disks *"
 echo "*********************************************"
 promptval "are you sure?" "n"
-[ "$val" == "y" ] && (create_zpools "$DISK_LIST")
+if [ "$val" != "y" ]; then
+	sigexit
+fi
+
+create_zpools "$DISK_LIST"
 
 clear
 echo "The system will now finish configuration and reboot. Please wait..."
