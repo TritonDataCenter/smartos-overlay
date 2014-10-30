@@ -19,6 +19,9 @@ export PATH
 load_sdc_sysinfo
 load_sdc_config
 
+# Arguments
+USB_PATH=$1
+
 # Defaults
 datacenter_headnode_id=0
 mail_to="root@localhost"
@@ -319,7 +322,7 @@ create_dump()
     # Create the dump zvol
     zfs create -V ${base_size}mb ${SYS_ZPOOL}/dump || \
       fatal "failed to create the dump zvol"
-    dumpadm -d /dev/zvol/dsk/${SYS_ZPOOL}/dump
+    dumpadm -d /dev/zvol/dsk/${SYS_ZPOOL}/dump >/dev/null
 }
 
 #
@@ -347,9 +350,17 @@ setup_datasets()
   if ! echo $datasets | grep ${USBKEYDS} > /dev/null; then
     if [[ -n $(/bin/bootparams | grep "^smartos=true") ]]; then
         printf "%-56s" "Creating config dataset... " 
-        zfs create -o mountpoint=legacy ${USBKEYDS} || \
-          fatal "failed to create the config dataset"
-        mkdir /usbkey
+        zfs create ${USBKEYDS} || fatal "failed to create the config dataset"
+        chmod 700 /${USBKEYDS}
+        if [[ -d /usbkey ]]; then
+            cd /usbkey
+            if ( ! find . -print | cpio -pdm /${USBKEYDS} 2>/dev/null ); then
+                fatal "failed to initialize the config dataset"
+            fi
+            cd /
+        fi
+        zfs set mountpoint=legacy ${USBKEYDS}
+        mkdir -p /usbkey
         mount -F zfs ${USBKEYDS} /usbkey
         printf "%4s\n" "done" 
     fi
@@ -381,6 +392,7 @@ setup_datasets()
     fi
 
     zfs set mountpoint=legacy ${VARDS}
+    printf "%4s\n" "done"
 
     if ! echo $datasets | grep ${SWAPVOL} > /dev/null; then
           printf "%-56s" "Creating swap zvol... " 
@@ -397,8 +409,8 @@ setup_datasets()
           size=${SYSINFO_MiB_of_Memory}
           zfs create -V ${size}mb ${SWAPVOL}
           swap -a /dev/zvol/dsk/${SWAPVOL}
+          printf "%4s\n" "done"
     fi
-    printf "%4s\n" "done" 
   fi
 }
 
@@ -458,6 +470,10 @@ create_zpool()
 create_zpools()
 {
   devs=$1
+
+  if [[ ${devs} == "all" ]]; then
+      devs=$(disklist -n)
+  fi
 
   export SYS_ZPOOL="zones"
   create_zpool "$devs"
@@ -532,6 +548,41 @@ updatenicstates
 export TERM=sun-color
 export TERM=xterm-color
 stty erase ^H
+
+#
+# Auto-config
+#
+if [ -f "${USB_PATH}/config" -a -n "${CONFIG_zpool_disks}" ]; then
+
+    printheader "Automatic Configuration"
+
+    create_zpools "${CONFIG_zpool_disks}"
+
+    if [[ ! -f ${USB_PATH}/shadow ]]; then
+        if [[ -n $CONFIG_root_shadow ]]; then
+            sed -e "s|^root:[^\:]*:|root:${CONFIG_root_shadow}:|" \
+                /etc/shadow > ${USB_PATH}/shadow
+        else
+            cp /etc/shadow ${USB_PATH}/shadow
+        fi
+
+        chmod 400 ${USB_PATH}/shadow
+    fi
+
+    if [[ ! -d ${USB_PATH}/ssh ]]; then
+        cp -rp /etc/ssh ${USB_PATH}/ssh
+    fi
+
+    if [[ ! -d ${USB_PATH}/ipf ]]; then
+        cp -rp /etc/ipf ${USB_PATH}/ipf
+    fi
+
+    echo
+    echo "This system was automatically configured and will now reboot"
+
+    sleep 3
+    reboot
+fi
 
 printheader "Copyright 2011, Joyent, Inc."
 

@@ -82,7 +82,7 @@ case "$1" in
             [[ ! -f ${USB_PATH}/config ]] && exit $SMF_EXIT_OK
         fi
     elif /bin/bootparams | grep "^smartos=true" > /dev/null 2>&1; then
-        USB_PATH=/`svcprop -p "joyentfs/usb_copy_path" svc:/system/filesystem/smartdc:default`
+        USB_PATH=`svcprop -p "joyentfs/usb_copy_path" svc:/system/filesystem/smartdc:default`
 
         # Check for config and run interactive if it doesn't exist.
         if [[ ! -f ${USB_PATH}/config ]]; then
@@ -96,6 +96,13 @@ case "$1" in
 
             # If user quit from interactive configuration then we're done.
             [[ ! -f ${USB_PATH}/config ]] && exit $SMF_EXIT_OK
+
+        elif [[ -z `zfs mount | awk '{print $2}' | grep "^${USB_PATH}$"` ]]; then
+            # ${USB_PATH}/config exists but ${USB_PATH} isn't ZFS dataset,
+            # so it must be pre-populated image ready for auto-config.
+
+            /smartdc/bin/smartos_prompt_config.sh "${USB_PATH}" \
+                </dev/console >&/dev/console
         fi
     fi
 
