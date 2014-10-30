@@ -32,6 +32,14 @@ declare -a nics
 declare -a assigned
 declare -a DISK_LIST
 
+# Disk selection related
+all_disks_list=
+iostat_disk_details=
+disk_info_cache_file=.diskinfo
+disk_info_selected_cache_file=.diskinfo-selected
+disk_limit=10 # By default we want to only show top 10 disks.
+$(iostat -En > ${disk_info_cache_file})
+
 sigexit()
 {
 	echo
@@ -273,36 +281,130 @@ promptpw()
 	done
 }
 
-promptpool()
-{
-  disks=$(disklist -n)
-  while [[ /usr/bin/true ]]; do
-    echo "Please select disks for the storage pool, space separated"
-    echo ""
-    printf "Valid choices are ${disks}"
-    echo ""
-    bad=""
-    read val
-    if [[ $val == "" ]]; then
-      echo "At least one disk must be specified"
-      echo ""
-      continue
-    fi
-    for disk in $(echo $val | tr " " "\n"); do
-      if [[ -z $disk ]]; then continue; fi;
-      echo $disks | grep $disk 1>&2 > /dev/null
-      if [[ $? != 0 ]]; then
-        bad="$disk $bad"
-      fi
-    done
-    if [[ $bad != "" ]]; then
-      printf "The disks %s are not valid choices" $bad
-    else
-      DISK_LIST="$val"
-      break
-    fi
+function print_error () {
+  printf "ERROR: %s\n" "$@"
+}
+
+function get_list_of_disks () {
+
+  # all_disks_list=( $(json -k < <(json -a Disks < <( /usr/bin/sysinfo ))|sed -e '/[][]/d' -e 's/\,//g'|xargs) )
+  all_disks_list=( $(disklist -n) )
+}
+
+function print_selected_disks () {
+
+  local idx_numbers=$@
+
+  printf "\n%s\n" "The following disks will be used to construct the pool:"
+  for i in ${idx_numbers[@]}; do 
+    awk -v var_d=${all_disks_list[$i]} '$0 ~ var_d {print $0}' < <( cat ${disk_info_selected_cache_file} )
   done
-  
+
+  # printf "The following disks were selected: $( for i in ${idx_numbers[@]}; 
+  #   do printf "%s " ${all_disks_list[$i]}; done )\n"
+}
+
+function print_list_of_disks () {
+
+  local this_disk_details=
+  ## We do not want to get this for all disks. So, we limit this to top 10.
+  ## This is really an ugly way to do things, but normally system disks
+  ## should be enumerated first.
+  [[ ${#all_disks_list[@]} -lt ${disk_limit} ]] && disk_limit=${#all_disks_list[@]} || true
+
+  [[ ${disk_limit} -eq 10 ]] && \
+  printf "%s\n" "Only first 10 disks are returned. If system has more than 10, some will be missing."
+  printf "%s %17s %-8s %-16s %-8s %-8s\n" "Number" "Device" "Vendor" "Product" "Size" "Serial"
+
+  # [[ ${debug} -gt 0 ]] && cat ${disk_info_cache_file}
+
+  for (( i=0; i<${disk_limit}; i++ ));
+
+    do
+      local diskid=${all_disks_list[$i]}
+
+      ## This may look a little ugly, but it returns a formatted list of disks.
+      ## An example of what the disk entry looks like is below. Vendor field is
+      ## 8 spaces, Product is 16 paces.
+      ## Number            Device Vendor   Product          Size     Serial
+      ## 0                 c1t0d0 VMware   Virtual          17.18GB  6000c298246baa3
+      ## 1                 c1t1d0 VMware   Virtual          8.59GB   6000c2958fba0d0
+      awk -v var_d=${diskid} -v idx=$i 'ln=0; $0 ~ var_d { if (NF >= 1) 
+      { getline; var_v=$2; var_p=$4; var_s=$10; getline; var_sz=$2; }}
+        END { printf("%s %22s %-8s %-16s %-8s %-8s\n", 
+          idx,var_d,var_v,var_p,var_sz,var_s) } 
+        ' < <( cat ${disk_info_cache_file} ) >> ${disk_info_selected_cache_file}
+      
+    done
+
+  printf "%s %22s %-8s %-16s %-8s %-8s\n" $(cat ${disk_info_selected_cache_file})
+}
+
+function select_disks_from_available () {
+
+  ## Need to better control input from users to avoid, for example
+  ## raidz configurations with only three disks. Perhaps should allow
+  ## a straight-forward way of specifying whether mirror or raidz is
+  ## desired and then pass that information onto the subroutine that
+  ## sets up the pool based on list of disks.
+  local prompt="Please enter a space-delimited list of disk indexes (ex: 2 4 7 9): "
+  local x=
+  local idx=0
+  local listgood=true
+  ## While the array is empty we are going to prompt for disk id.
+  while [[ -z ${x[@]} || ${listgood} != "true" ]] ; do
+      
+    if [[ idx -gt 0 ]]; then
+      if [[ ${listgood} != "true" ]]; then
+        print_error "Only unique positive numbers from 0 through 9 are allowed in this list."
+        listgood=true
+      else
+        print_error "List of disks cannot be empty. At least one disk is required."
+      fi
+    fi
+
+    printf "%s\n"; read -r -p "${prompt}" -a x
+
+    local unique=($(for v in "${x[@]}"; do echo "$v";done|sort|uniq))
+
+    if [[ ${#unique[@]} -ne ${#x[@]} ]]; then
+      listgood=false
+      continue
+    else
+
+      for each in ${x[@]} 
+        do
+
+          ## This regex should be improved, but works OK seemingly.
+          if [[ ! ${each} =~ ^[0-9]$ ]]; then
+            listgood=false
+            local x=
+            continue
+          fi
+        done
+    fi
+
+    (( idx++ )) # Increment the counter as we go through the loop.
+  print_selected_disks $( for i in ${x[@]}; do printf "%s " $i; done )
+
+  printf "%s\n"
+  promptval "Are these correct disks?" "n"
+  [ "$val" == "y" ] || listgood=false
+
+  DISK_LIST=$( for i in ${x[@]}; do printf "%s " ${all_disks_list[$i]}; done )
+  done
+}
+
+
+## Replacement of the original `promptpool` subroutine. The process is
+## broken into three steps: acquiring a list of disks, returning a
+## formatted list of disks to the user and requesting that a user select
+## disk or disks from the list.
+function promptpool () {
+
+  get_list_of_disks
+  print_list_of_disks
+  select_disks_from_available
 }
 
 create_dump()
@@ -590,8 +692,9 @@ while [ /usr/bin/true ]; do
     dns_domain="$val"
   fi	
 	printheader "Storage"
-	promptpool
- 
+  ## Handle more gracefully disks on the system using an index.
+  get_list_of_disks; print_list_of_disks; select_disks_from_available
+
 	printheader "Account Information"
 	
 	promptpw "Enter root password" "nolen"
