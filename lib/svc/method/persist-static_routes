@@ -1,0 +1,47 @@
+#!/sbin/sh
+#
+# CDDL HEADER START
+#
+# The contents of this file are subject to the terms of the
+# Common Development and Distribution License (the "License").
+# You may not use this file except in compliance with the License.
+#
+# You can obtain a copy of the license at usr/src/OPENSOLARIS.LICENSE
+# or http://www.opensolaris.org/os/licensing.
+# See the License for the specific language governing permissions
+# and limitations under the License.
+#
+# When distributing Covered Code, include this CDDL HEADER in each
+# file and include the License file at usr/src/OPENSOLARIS.LICENSE.
+# If applicable, add the following below this CDDL HEADER, with the
+# fields enclosed by brackets "[]" replaced with your own identifying
+# information: Portions Copyright [yyyy] [name of copyright owner]
+#
+# CDDL HEADER END
+#
+#
+# Copyright (c) 1999, 2010, Oracle and/or its affiliates. All rights reserved.
+# Portions Copyright 2012 Every Ware Ltd.
+
+# This script configures IP routing.
+
+. /lib/svc/share/smf_include.sh
+. /lib/sdc/config.sh
+
+#
+# Only run in the global zone, because otherwise the config is persistent.
+#
+smf_is_globalzone || exit $SMF_EXIT_OK
+
+#
+# Read /usbkey/config.inc/static_routes and add each route.
+#
+if [ -f "${CONFIG_config_inc_dir}/static_routes" ]; then
+	echo "Adding persistent routes:"
+	/usr/bin/egrep -v "^(#|$)" "${CONFIG_config_inc_dir}/static_routes" | while read line; do
+		/usr/sbin/route add $line
+	done
+fi
+
+# Clear exit status.
+exit $SMF_EXIT_OK
